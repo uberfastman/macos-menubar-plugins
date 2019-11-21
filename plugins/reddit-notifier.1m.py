@@ -9,9 +9,9 @@
 # <bitbar.author>Wren J. R.</bitbar.author>
 # <bitbar.author.github>uberfastman</bitbar.author.github>
 # <bitbar.desc>Display unread reddit messages in the macOS menubar!</bitbar.desc>
-# <bitbar.image>https://github.com/uberfastman/bitbar-plugins/raw/develop/plugins/notifier/reddit/images/bitbar-reddit-messages.png</bitbar.image>
+# <bitbar.image>https://github.com/uberfastman/local-bitbar-plugins/raw/develop/plugins/notifier/reddit/images/bitbar-reddit-messages.png</bitbar.image>
 # <bitbar.dependencies>python3,praw,pync</bitbar.dependencies>
-# <bitbar.abouturl>https://github.com/uberfastman/bitbar-plugins</bitbar.abouturl>
+# <bitbar.abouturl>https://github.com/uberfastman/local-bitbar-plugins</bitbar.abouturl>
 
 import json
 import logging
