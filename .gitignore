@@ -11,7 +11,7 @@ token*.js
 
 .1_telegram-notifier.1m.py
 .4_slack-notifier.1m.py
-3_slack-notifier.1m.js
+slack-notifier.1m.js
 slack/
 *.scpt
 *.xcf

@@ -1,0 +1,5 @@
+{
+  "client_id": "REDDIT_CLIENT_ID_STRING",
+  "client_secret": "REDDIT_CLIENT_SECRET_STRING",
+  "refresh_token": "REDDIT_REFRESH_TOKEN_STRING"
+}

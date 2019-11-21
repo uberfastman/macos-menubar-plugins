@@ -6,10 +6,11 @@
 # <bitbar.author>Wren J. R.</bitbar.author>
 # <bitbar.author.github>uberfastman</bitbar.author.github>
 # <bitbar.desc>Display unread iMessage/SMS messages in the macOS menubar!</bitbar.desc>
-# <bitbar.image>http://www.hosted-somewhere/pluginimage</bitbar.image>
+# <bitbar.image>https://github.com/uberfastman/bitbar-plugins/raw/develop/plugins/notifier/text/images/bitbar-text-messages.png</bitbar.image>
 # <bitbar.dependencies>python3,pandas,pync</bitbar.dependencies>
-# <bitbar.abouturl>http://url-to-about.com/</bitbar.abouturl>
+# <bitbar.abouturl>https://github.com/uberfastman/bitbar-plugins</bitbar.abouturl>
 
+import json
 import logging
 import os
 import sqlite3
@@ -25,8 +26,6 @@ from notifier.text import queries
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ START SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-username = "wrenjr"
-contact_db_dir = "C89A739C-EE06-4029-BF53-E4F95E7F1C8A"
 max_line_chars = 75
 max_group_chat_search_results = 10  # The higher this number, the longer the app will take to run each time.
 log_level = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
@@ -82,6 +81,12 @@ start = time.process_time()
 # Currently supported message services: text (iMessage/SMS on macOS), reddit, slack
 message_type_str = "text"
 local_dir = os.path.dirname(os.path.abspath(__file__)) + "/"
+
+with open(local_dir + "notifier/" + message_type_str + "/private.json", "r") as credentials_json:
+    credentials = json.load(credentials_json)
+
+username = credentials.get("username")
+contact_db_dir = credentials.get("contact_db_dir")
 
 conn = sqlite3.connect("/Users/" + username + "/Library/Messages/chat.db")
 cursor = conn.cursor()

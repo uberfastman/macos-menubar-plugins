@@ -1,7 +1,7 @@
 #!/usr/local/opt/python/libexec/bin/python
 # -*- coding: utf-8 -*-
 
-# Adapted fomr code originally written by /u/HeyItsShuga found here:
+# Adapted from code originally written by /u/HeyItsShuga found here:
 # https://github.com/matryer/bitbar-plugins/blob/master/Web/Reddit/redditnotify.30s.py
 
 # <bitbar.title>Reddit Notifications</bitbar.title>
@@ -9,9 +9,9 @@
 # <bitbar.author>Wren J. R.</bitbar.author>
 # <bitbar.author.github>uberfastman</bitbar.author.github>
 # <bitbar.desc>Display unread reddit messages in the macOS menubar!</bitbar.desc>
-# <bitbar.image>http://www.hosted-somewhere/pluginimage</bitbar.image>
-# <bitbar.dependencies>python3,praw</bitbar.dependencies>
-# <bitbar.abouturl>http://url-to-about.com/</bitbar.abouturl>
+# <bitbar.image>https://github.com/uberfastman/bitbar-plugins/raw/develop/plugins/notifier/reddit/images/bitbar-reddit-messages.png</bitbar.image>
+# <bitbar.dependencies>python3,praw,pync</bitbar.dependencies>
+# <bitbar.abouturl>https://github.com/uberfastman/bitbar-plugins</bitbar.abouturl>
 
 import json
 import logging
