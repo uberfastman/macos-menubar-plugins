@@ -1,0 +1,17 @@
+.DS_Store
+.idea/
+*.pyc
+
+node_modules/
+resources/
+
+private*.json
+token*.js
+*_messages_processed.csv
+
+.1_telegram-notifier.1m.py
+.4_slack-notifier.1m.py
+3_slack-notifier.1m.js
+slack/
+*.scpt
+*.xcf
