@@ -44,16 +44,17 @@ class BaseConversation(object):
             if len(self.participants) > 1:
                 self.is_group_conversation = True
                 if not self.title:
-                    self.title = "\u001b[39mGroup BaseMessage\u001b[33m"
+                    self.title = "\u001b[39mGroup Message\u001b[33m"
         else:
-            raise ValueError("Cannot add BaseMessage with mismatching id to BaseConversation!")
+            raise ValueError("Cannot add Message with mismatching id to Conversation!")
 
     def get_message_count(self):
         return len(self.messages)
 
     def get_participants_str(self):
         if self.is_group_conversation:
-            return ", ".join(participant for participant in self.participants) + (", ..." if len(self.participants) == 1 else "")
+            return ", ".join(participant for participant in self.participants) + (
+                ", ..." if len(self.participants) == 1 else "")
         else:
             return "".join(participant for participant in self.participants)
 

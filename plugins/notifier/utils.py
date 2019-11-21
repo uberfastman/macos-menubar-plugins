@@ -104,6 +104,7 @@ def encode_image_thumbnail(path_str, mime_type):
                 if hasattr(img, "_getexif"):  # only present in JPEGs
 
                     try:
+                        # noinspection PyProtectedMember
                         exif = img._getexif()
                         if exif:
                             exif = dict(exif.items())
@@ -136,7 +137,7 @@ def send_macos_notification(unread_count, message_senders, title, arg_dict):
     notification_group_id = "notifier"
 
     Notifier.notify(
-        message="BaseMessage" + ("s" if (len(message_senders) > 1 and unread_count > 1) else "") + " from: " +
+        message="Message" + ("s" if (len(message_senders) > 1 and unread_count > 1) else "") + " from: " +
                 ", ".join(message_senders),  # content of notification
         title=title + ": " + str(unread_count) + " unread message" + (
             "s" if unread_count > 1 else ""),  # notification title

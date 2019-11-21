@@ -5,13 +5,55 @@
 
 
 def get_sqlite_attach_db_query(username, contact_db_dir):
-    return "ATTACH '/Users/%s/Library/Application Support/AddressBook/Sources/%s/AddressBook-v22.abcddb' as adb" % (username, contact_db_dir)
+    return "ATTACH '/Users/%s/Library/Application Support/AddressBook/Sources/%s/AddressBook-v22.abcddb' as adb" % (
+        username, contact_db_dir)
 
 
-sqlite_select_query = "SELECT msg.guid as id, cht.rowid as rowid, cht.guid as cguid, cht.chat_identifier as cid, cht.group_id as grp, cht.display_name as title, strftime('%m-%d-%Y %H:%M:%S', datetime(date/1000000000 + strftime('%s', '2001-01-01') ,'unixepoch','localtime')) as timestamp, CASE WHEN instr(hdl.id, '@') > 0 THEN hdl.id ELSE substr(hdl.id, -10) END contact, substr(replace(replace(replace(replace(pnmbr.ZFULLNUMBER, '-', ''), ' ', ''), '(', ''), ')', ''), -10) as number, replace(CASE WHEN rcrd.ZLASTNAME IS NULL THEN rcrd.ZFIRSTNAME ELSE rcrd.ZFIRSTNAME || ' ' || CASE WHEN rcrd.ZMIDDLENAME IS NULL THEN '' ELSE rcrd.ZMIDDLENAME END || ' ' || rcrd.ZLASTNAME END, '  ', ' ') as sender, rcrd.ZORGANIZATION as org, msg.cache_has_attachments, atc.mime_type, atc.filename, replace(replace(text, CHAR(10), ' '), CHAR(13), ' ') as message FROM message msg INNER JOIN handle hdl ON hdl.ROWID=msg.handle_id LEFT JOIN adb.ZABCDPHONENUMBER pnmbr ON contact = number LEFT JOIN adb.ZABCDRECORD as rcrd ON pnmbr.ZOWNER = rcrd.Z_PK LEFT JOIN chat_message_join cmj ON msg.rowid = cmj.message_id LEFT JOIN chat cht ON cmj.chat_id = cht.rowid LEFT JOIN message_attachment_join maj ON (msg.rowid = maj.message_id AND msg.cache_has_attachments = 1) LEFT JOIN attachment atc ON maj.attachment_id = atc.rowid WHERE is_read = 0 AND text != 'NULL' AND is_from_me != 1 ORDER BY date"
+sqlite_select_query = "SELECT msg.guid as id, cht.rowid as rowid, cht.guid as cguid, cht.chat_identifier as cid, " \
+                      "cht.group_id as grp, cht.display_name as title, strftime('%m-%d-%Y %H:%M:%S', " \
+                      "datetime(date/1000000000 + strftime('%s', '2001-01-01') ,'unixepoch','localtime')) as " \
+                      "timestamp, CASE WHEN instr(hdl.id, '@') > 0 THEN hdl.id ELSE substr(hdl.id, -10) END contact, " \
+                      "substr(replace(replace(replace(replace(pnmbr.ZFULLNUMBER, '-', ''), ' ', ''), '(', ''), ')', " \
+                      "''), -10) as number, replace(CASE WHEN rcrd.ZLASTNAME IS NULL THEN rcrd.ZFIRSTNAME ELSE " \
+                      "rcrd.ZFIRSTNAME || ' ' || CASE WHEN rcrd.ZMIDDLENAME IS NULL THEN '' ELSE rcrd.ZMIDDLENAME END" \
+                      " || ' ' || rcrd.ZLASTNAME END, '  ', ' ') as sender, rcrd.ZORGANIZATION as org, " \
+                      "msg.cache_has_attachments, atc.mime_type, atc.filename, replace(replace(text, CHAR(10), ' '), " \
+                      "CHAR(13), ' ') as message FROM message msg INNER JOIN handle hdl ON hdl.ROWID=msg.handle_id " \
+                      "LEFT JOIN adb.ZABCDPHONENUMBER pnmbr ON contact = number LEFT JOIN adb.ZABCDRECORD as rcrd ON " \
+                      "pnmbr.ZOWNER = rcrd.Z_PK LEFT JOIN chat_message_join cmj ON msg.rowid = cmj.message_id LEFT " \
+                      "JOIN chat cht ON cmj.chat_id = cht.rowid LEFT JOIN message_attachment_join maj ON (msg.rowid =" \
+                      " maj.message_id AND msg.cache_has_attachments = 1) LEFT JOIN attachment atc ON " \
+                      "maj.attachment_id = atc.rowid WHERE is_read = 0 AND text != 'NULL' AND is_from_me != 1 ORDER " \
+                      "BY date "
 
-sqlite_get_recent_query = "SELECT msg.guid as id, cht.rowid as rowid, cht.guid as cguid, cht.chat_identifier as cid, cht.group_id as grp, cht.display_name as title, strftime('%m-%d-%Y %H:%M:%S', datetime(date/1000000000 + strftime('%s', '2001-01-01') ,'unixepoch','localtime')) as timestamp, CASE WHEN instr(hdl.id, '@') > 0 THEN hdl.id ELSE substr(hdl.id, -10) END contact, substr(replace(replace(replace(replace(pnmbr.ZFULLNUMBER, '-', ''), ' ', ''), '(', ''), ')', ''), -10) as number, replace(CASE WHEN rcrd.ZLASTNAME IS NULL THEN rcrd.ZFIRSTNAME ELSE rcrd.ZFIRSTNAME || ' ' || CASE WHEN rcrd.ZMIDDLENAME IS NULL THEN '' ELSE rcrd.ZMIDDLENAME END || ' ' || rcrd.ZLASTNAME END, '  ', ' ') as sender, rcrd.ZORGANIZATION as org, msg.cache_has_attachments, atc.mime_type, atc.filename, replace(replace(text, CHAR(10), ' '), CHAR(13), ' ') as message FROM message msg INNER JOIN handle hdl ON hdl.ROWID=msg.handle_id LEFT JOIN adb.ZABCDPHONENUMBER pnmbr ON contact = number LEFT JOIN adb.ZABCDRECORD as rcrd ON pnmbr.ZOWNER = rcrd.Z_PK LEFT JOIN chat_message_join cmj ON msg.rowid = cmj.message_id LEFT JOIN chat cht ON cmj.chat_id = cht.rowid LEFT JOIN message_attachment_join maj ON (msg.rowid = maj.message_id AND msg.cache_has_attachments = 1) LEFT JOIN attachment atc ON maj.attachment_id = atc.rowid WHERE text != 'NULL' ORDER BY date DESC LIMIT 100"
+sqlite_get_recent_query = "SELECT msg.guid as id, cht.rowid as rowid, cht.guid as cguid, cht.chat_identifier as cid, " \
+                          "cht.group_id as grp, cht.display_name as title, strftime('%m-%d-%Y %H:%M:%S', " \
+                          "datetime(date/1000000000 + strftime('%s', '2001-01-01') ,'unixepoch','localtime')) as " \
+                          "timestamp, CASE WHEN instr(hdl.id, '@') > 0 THEN hdl.id ELSE substr(hdl.id, " \
+                          "-10) END contact, substr(replace(replace(replace(replace(pnmbr.ZFULLNUMBER, '-', ''), ' '," \
+                          " ''), '(', ''), ')', ''), -10) as number, replace(CASE WHEN rcrd.ZLASTNAME IS NULL THEN " \
+                          "rcrd.ZFIRSTNAME ELSE rcrd.ZFIRSTNAME || ' ' || CASE WHEN rcrd.ZMIDDLENAME IS NULL THEN '' " \
+                          "ELSE rcrd.ZMIDDLENAME END || ' ' || rcrd.ZLASTNAME END, '  ', ' ') as sender, " \
+                          "rcrd.ZORGANIZATION as org, msg.cache_has_attachments, atc.mime_type, atc.filename, " \
+                          "replace(replace(text, CHAR(10), ' '), CHAR(13), ' ') as message FROM message msg INNER " \
+                          "JOIN handle hdl ON hdl.ROWID=msg.handle_id LEFT JOIN adb.ZABCDPHONENUMBER pnmbr ON contact" \
+                          " = number LEFT JOIN adb.ZABCDRECORD as rcrd ON pnmbr.ZOWNER = rcrd.Z_PK LEFT JOIN " \
+                          "chat_message_join cmj ON msg.rowid = cmj.message_id LEFT JOIN chat cht ON cmj.chat_id = " \
+                          "cht.rowid LEFT JOIN message_attachment_join maj ON (msg.rowid = maj.message_id AND " \
+                          "msg.cache_has_attachments = 1) LEFT JOIN attachment atc ON maj.attachment_id = atc.rowid " \
+                          "WHERE text != 'NULL' ORDER BY date DESC LIMIT 100 "
 
-sqlite_group_chat_query = "SELECT cht.chat_identifier as cid, strftime('%m-%d-%Y %H:%M:%S', datetime(date/1000000000 + strftime('%s', '2001-01-01') ,'unixepoch','localtime')) as timestamp, CASE WHEN instr(hdl.id, '@') > 0 THEN hdl.id ELSE substr(hdl.id, -10) END contact, substr(replace(replace(replace(replace(pnmbr.ZFULLNUMBER, '-', ''), ' ', ''), '(', ''), ')', ''), -10) as number, replace(CASE WHEN rcrd.ZLASTNAME IS NULL THEN rcrd.ZFIRSTNAME ELSE rcrd.ZFIRSTNAME || ' ' || CASE WHEN rcrd.ZMIDDLENAME IS NULL THEN '' ELSE rcrd.ZMIDDLENAME END || ' ' || rcrd.ZLASTNAME END, '  ', ' ') as sender, rcrd.ZORGANIZATION as org FROM message msg INNER JOIN handle hdl ON hdl.ROWID=msg.handle_id LEFT JOIN adb.ZABCDPHONENUMBER pnmbr ON contact = number LEFT JOIN adb.ZABCDRECORD as rcrd ON pnmbr.ZOWNER = rcrd.Z_PK LEFT JOIN chat_message_join cmj ON msg.rowid = cmj.message_id LEFT JOIN chat cht ON cmj.chat_id = cht.rowid WHERE cht.chat_identifier = ? ORDER BY date DESC LIMIT ?"
+sqlite_group_chat_query = "SELECT cht.chat_identifier as cid, strftime('%m-%d-%Y %H:%M:%S', datetime(date/1000000000 " \
+                          "+ strftime('%s', '2001-01-01') ,'unixepoch','localtime')) as timestamp, CASE WHEN instr(" \
+                          "hdl.id, '@') > 0 THEN hdl.id ELSE substr(hdl.id, -10) END contact, substr(replace(replace(" \
+                          "replace(replace(pnmbr.ZFULLNUMBER, '-', ''), ' ', ''), '(', ''), ')', ''), -10) as number," \
+                          " replace(CASE WHEN rcrd.ZLASTNAME IS NULL THEN rcrd.ZFIRSTNAME ELSE rcrd.ZFIRSTNAME || ' '" \
+                          " || CASE WHEN rcrd.ZMIDDLENAME IS NULL THEN '' ELSE rcrd.ZMIDDLENAME END || ' ' || " \
+                          "rcrd.ZLASTNAME END, '  ', ' ') as sender, rcrd.ZORGANIZATION as org FROM message msg INNER" \
+                          " JOIN handle hdl ON hdl.ROWID=msg.handle_id LEFT JOIN adb.ZABCDPHONENUMBER pnmbr ON " \
+                          "contact = number LEFT JOIN adb.ZABCDRECORD as rcrd ON pnmbr.ZOWNER = rcrd.Z_PK LEFT JOIN " \
+                          "chat_message_join cmj ON msg.rowid = cmj.message_id LEFT JOIN chat cht ON cmj.chat_id = " \
+                          "cht.rowid WHERE cht.chat_identifier = ? ORDER BY date DESC LIMIT ? "
 
-# sqlite_query_order_by = "ORDER BY strftime('%m-%d-%Y %H:%M:%S', datetime(date/1000000000 + strftime('%s', '2001-01-01') ,'unixepoch','localtime'))"
+# sqlite_query_order_by = "ORDER BY strftime('%m-%d-%Y %H:%M:%S', datetime(date/1000000000 + " \
+#                         "strftime('%s', '2001-01-01') ,'unixepoch','localtime'))"

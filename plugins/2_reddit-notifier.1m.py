@@ -13,17 +13,17 @@
 # <bitbar.dependencies>python3,praw</bitbar.dependencies>
 # <bitbar.abouturl>http://url-to-about.com/</bitbar.abouturl>
 
+import json
 import logging
 import os
 import sys
 import time
-import json
-from datetime import datetime
-from dateutil import tz
 from collections import OrderedDict
+from datetime import datetime
 
 import pandas as pd
 import praw
+from dateutil import tz
 from prawcore.exceptions import ResponseException, RequestException
 
 import notifier.utils as utils
@@ -34,6 +34,8 @@ from notifier.base import BaseMessage, BaseConversation
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 max_line_chars = 50
 log_level = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
+
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -42,7 +44,7 @@ log_level = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging
 class RedditMessage(BaseMessage):
 
     def __init__(self, df_row, max_line_characters, bitbar_msg_display_str):
-        BaseMessage.__init__(self, df_row, max_line_characters, bitbar_msg_display_str)
+        super().__init__(df_row, max_line_characters, bitbar_msg_display_str)
 
         self.timestamp = datetime.utcfromtimestamp(df_row.timestamp).strftime("%m-%d-%Y %H:%M:%S")
         utc_time_zone = tz.tzutc()
@@ -73,7 +75,7 @@ class RedditMessage(BaseMessage):
 class RedditConversation(BaseConversation):
 
     def __init__(self, reddit_message_obj):
-        BaseConversation.__init__(self, reddit_message_obj)
+        super().__init__(reddit_message_obj)
         if reddit_message_obj.comment:
             self.type_str = "\u001b[31m (comment)\u001b[39m"
         else:

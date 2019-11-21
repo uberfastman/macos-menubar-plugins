@@ -18,9 +18,9 @@ from collections import OrderedDict
 
 import pandas as pd
 
-from notifier.text import queries
 import notifier.utils as utils
 from notifier.base import BaseMessage, BaseConversation
+from notifier.text import queries
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ START SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -30,6 +30,8 @@ contact_db_dir = "C89A739C-EE06-4029-BF53-E4F95E7F1C8A"
 max_line_chars = 75
 max_group_chat_search_results = 10  # The higher this number, the longer the app will take to run each time.
 log_level = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
+
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -38,7 +40,7 @@ log_level = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging
 class TextMessage(BaseMessage):
 
     def __init__(self, df_row, max_line_characters, bitbar_msg_display_str):
-        BaseMessage.__init__(self, df_row, max_line_characters, bitbar_msg_display_str)
+        super().__init__(df_row, max_line_characters, bitbar_msg_display_str)
 
         self.timestamp = utils.format_timestamp(df_row.timestamp)
         self.sender = df_row.sender if df_row.sender else (df_row.org if df_row.org else df_row.contact)
@@ -57,7 +59,7 @@ class TextMessage(BaseMessage):
 class TextConversation(BaseConversation):
 
     def __init__(self, text_message_obj, sqlite_cursor, sqlite_query, max_conversation_search_results):
-        BaseConversation.__init__(self, text_message_obj)
+        super().__init__(text_message_obj)
 
         if "chat" in text_message_obj.cid:
             self.is_group_conversation = True
@@ -69,7 +71,7 @@ class TextConversation(BaseConversation):
                 self.participants.add(
                     df_row.sender if df_row.sender else (df_row.org if df_row.org else df_row.contact))
             if not self.title:
-                self.title = "\u001b[39mGroup BaseMessage\u001b[33m"
+                self.title = "\u001b[39mGroup Message\u001b[33m"
 
 
 logger = logging.getLogger(__name__)
