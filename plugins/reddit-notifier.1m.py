@@ -1,4 +1,4 @@
-#!/usr/local/opt/python/libexec/bin/python
+#!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
 
 # Adapted from code originally written by /u/HeyItsShuga found here:
