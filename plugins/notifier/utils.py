@@ -179,7 +179,8 @@ def generate_output_unread(local_dir, message_type_str, bitbar_display_str, unre
         message_display_str = u" \u001b[37m| ansi=true refresh=true "
 
         if conversation.title:
-            print(conversation.title + message_display_str + conversation.bitbar_msg_display_str + "font=Menlo size=10")
+            print(conversation.title + message_display_str + conversation.bitbar_msg_display_str + " font=Menlo size=10")
+
         print(u"\u001b[33m" + conversation.get_participants_str() + message_display_str +
               conversation.bitbar_msg_display_str)
 
