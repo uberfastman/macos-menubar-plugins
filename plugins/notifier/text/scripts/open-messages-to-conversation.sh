@@ -1,6 +1,6 @@
 #!/bin/sh
 
-osascript <<END
+osascript << END
     set rowNum to $1 as integer
 	--log rowNum
 

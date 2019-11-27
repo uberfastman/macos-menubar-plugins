@@ -67,7 +67,7 @@ class RedditMessage(BaseMessage):
         if df_row.context:
             self.context = df_row.context
         else:
-            self.context = "/message/unread/"
+            self.context = "/message/messages/" + df_row.id
 
         self.bitbar_msg_display_str = "href=" + utils.sanitize_url("https://www.reddit.com" + self.context)
 
@@ -100,6 +100,7 @@ local_dir = os.path.dirname(os.path.abspath(__file__)) + "/"
 
 with open(local_dir + "notifier/reddit/private.json", "r") as credentials_json:
     credentials = json.load(credentials_json)
+
 reddit = praw.Reddit(client_id=credentials.get("client_id"),
                      client_secret=credentials.get("client_secret"),
                      refresh_token=credentials.get("refresh_token"),
