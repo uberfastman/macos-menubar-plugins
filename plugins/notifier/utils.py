@@ -14,6 +14,7 @@ import pandas as pd
 from PIL import Image, ExifTags
 from pandas.errors import EmptyDataError
 from pync import Notifier
+from pymediainfo import MediaInfo
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~ START SET CUSTOM LOCAL VARIABLES ~~~~~
@@ -92,37 +93,58 @@ def encode_image_thumbnail(path_str, mime_type):
         path_str = str.replace(path_str, "~", str(Path.home()))
 
         try:
-            img = Image.open(path_str)
             output = BytesIO()
 
-            if mime_type == "image/jpeg":
-                orientation = 0
-                for key in ExifTags.TAGS.keys():
-                    if ExifTags.TAGS[key] == "Orientation":
-                        orientation = key
+            attachment_media_file = MediaInfo.parse(path_str)
+            attachment_is_video = False
+            for track in attachment_media_file.tracks:
+                if track.track_type == "Video":
+                    attachment_is_video = True
 
-                if hasattr(img, "_getexif"):  # only present in JPEGs
+            if attachment_is_video:
+                # TODO: extract first frame of video for thumbnail instead of placeholder image
+                video_file_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+                    os.path.abspath(__file__)))), "plugins", "notifier", "text", "images", "video-file.png")
+                img = Image.open(video_file_icon_path)
+                img.save(output, format="PNG")
 
-                    try:
-                        # noinspection PyProtectedMember
-                        exif = img._getexif()
-                        if exif:
-                            exif = dict(exif.items())
+            else:
+                img = Image.open(path_str)
 
-                            if exif[orientation] == 3:
-                                img = img.rotate(180, expand=True)
-                            elif exif[orientation] == 6:
-                                img = img.rotate(270, expand=True)
-                            elif exif[orientation] == 8:
-                                img = img.rotate(90, expand=True)
-                    except KeyError as ke:
-                        logger.error("Unable to rotate image due to KeyError: {}".format(ke))
+                if mime_type == "image/jpeg":
+                    orientation = 0
+                    for key in ExifTags.TAGS.keys():
+                        if ExifTags.TAGS[key] == "Orientation":
+                            orientation = key
 
-                    img.thumbnail((thumbnail_pixel_size, thumbnail_pixel_size), Image.ANTIALIAS)
-                    img.save(output, format="JPEG")
+                    if hasattr(img, "_getexif"):  # only present in JPEGs
+                        try:
+                            # noinspection PyProtectedMember
+                            exif = img._getexif()
+                            if exif:
+                                exif = dict(exif.items())
 
-            elif mime_type == "image/gif":
-                img.save(output, save_all=True, format="GIF")
+                                if exif[orientation] == 3:
+                                    img = img.rotate(180, expand=True)
+                                elif exif[orientation] == 6:
+                                    img = img.rotate(270, expand=True)
+                                elif exif[orientation] == 8:
+                                    img = img.rotate(90, expand=True)
+                        except KeyError as ke:
+                            logger.error("Unable to rotate image due to KeyError: {}".format(ke))
+
+                        img.thumbnail((thumbnail_pixel_size, thumbnail_pixel_size), Image.ANTIALIAS)
+                        img.save(output, format="JPEG")
+
+                elif mime_type == "image/gif":
+                    img.save(output, save_all=True, format="GIF")
+
+                elif mime_type == "image/png":
+                    img.save(output, format="PNG")
+
+                else:
+                    # TODO: handle more image MIME types
+                    pass
 
             img_data = output.getvalue()
 
@@ -179,7 +201,8 @@ def generate_output_unread(local_dir, message_type_str, bitbar_display_str, unre
         message_display_str = u" \u001b[37m| ansi=true refresh=true "
 
         if conversation.title:
-            print(conversation.title + message_display_str + conversation.bitbar_msg_display_str + " font=Menlo size=10")
+            print(
+                conversation.title + message_display_str + conversation.bitbar_msg_display_str + " font=Menlo size=10")
 
         print(u"\u001b[33m" + conversation.get_participants_str() + message_display_str +
               conversation.bitbar_msg_display_str)
@@ -191,9 +214,16 @@ def generate_output_unread(local_dir, message_type_str, bitbar_display_str, unre
             msg_sender_start_str = u"\u001b[31m(" + message.sender + ") \u001b[32m"
             msg_format_str = u"\u001b[32m"
 
-            if message.get_message_len() == 0 and message.attachment == 1:
+            if message.attachment == 1:
 
-                msg_attachment_str = u"\u001b[35m(attachment) \u001b[32m"
+                if message.get_message_len() == 0:
+                    msg_attachment_str = u"\u001b[35m(attachment{}) \u001b[32m".format(
+                        (" - " + message.attchtype) if message.attchtype else "")
+                else:
+                    # TODO: handle messages that are longer than the max_line_chars with video attachments
+                    msg_attachment_str = u"{} \u001b[35m(attachment{}) \u001b[32m".format(
+                        message.body, (" - " + message.attchtype) if message.attchtype else "")
+
                 if conversation.is_group_conversation:
                     print(timestamp_display_str)
                     print(msg_sender_start_str + msg_attachment_str + message_display_str +
