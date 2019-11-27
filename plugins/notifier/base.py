@@ -15,6 +15,7 @@ class BaseMessage(object):
         self.body = df_row.body.replace('\n', ' ').replace('\r', '').strip()
         self.body_short = self.body[:max_line_characters] + "..."
         self.body_wrapped = textwrap.wrap(self.body, max_line_characters + 1, break_long_words=False)
+        self.attachment = 0
         self.bitbar_msg_display_str = bitbar_msg_display_str
 
     def get_message_len(self):

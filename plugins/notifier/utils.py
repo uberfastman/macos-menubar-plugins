@@ -215,7 +215,6 @@ def generate_output_unread(local_dir, message_type_str, bitbar_display_str, unre
             msg_format_str = u"\u001b[32m"
 
             if message.attachment == 1:
-
                 if message.get_message_len() == 0:
                     msg_attachment_str = u"\u001b[35m(attachment{}) \u001b[32m".format(
                         (" - " + message.attchtype) if message.attchtype else "")
