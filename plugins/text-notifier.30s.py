@@ -51,7 +51,10 @@ class TextMessage(BaseMessage):
         self.number = df_row.number
         self.attachment = df_row.attachment
         self.attchtype = df_row.attchtype
-        self.attchfile = utils.encode_image_thumbnail(df_row.attchfile, df_row.attchtype)
+        try:
+            self.attchfile, self.attchhasthumb = utils.encode_attachment(df_row, max_line_characters)
+        except TypeError:
+            self.attchfile = None
         self.org = df_row.org
 
 
