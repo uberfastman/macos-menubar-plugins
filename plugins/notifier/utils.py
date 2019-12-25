@@ -191,6 +191,10 @@ def generate_output_read(local_dir, message_type_str, bitbar_display_str):
     print("---")
     print("Refresh | font=HelveticaNeue-Italic color=#7FC3D8 refresh=true")
 
+    # create data directory if it does not exist
+    if not os.path.isdir(local_dir + "notifier/" + message_type_str + "/data"):
+        os.makedirs(local_dir + "notifier/" + message_type_str + "/data")
+
     # open processed messages file using w+ mode to truncate the contents (clear all processed message UUIDs)
     file = open(
         local_dir + "notifier/" + message_type_str + "/data/" + message_type_str + "_messages_processed.csv", "w+")
