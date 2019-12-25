@@ -14,4 +14,3 @@ token*.js
 slack-notifier.1m.js
 slack/
 *.scpt
-*.xcf
