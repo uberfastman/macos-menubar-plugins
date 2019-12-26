@@ -4,6 +4,7 @@
 
 node_modules/
 resources/
+venv
 
 private*.json
 token*.js

@@ -141,8 +141,8 @@ def encode_attachment(message_row, max_line_characters):
                                         img = img.rotate(270, expand=True)
                                     elif exif[orientation] == 8:
                                         img = img.rotate(90, expand=True)
-                            except KeyError as ke:
-                                logger.error("Unable to rotate image due to KeyError: {}".format(ke))
+                            except KeyError:
+                                img = img
 
                             img.thumbnail((thumbnail_pixel_size, thumbnail_pixel_size), Image.ANTIALIAS)
                             img.save(output, format="JPEG")
