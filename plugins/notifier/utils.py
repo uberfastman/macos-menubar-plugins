@@ -107,7 +107,10 @@ def encode_attachment(message_row, max_line_characters):
             else:
                 output = BytesIO()
 
-                attachment_media_file = MediaInfo.parse(path_str)
+                attachment_media_file = MediaInfo.parse(
+                    path_str,
+                    library_file=Path(__file__).resolve().parent.parent.joinpath("resources", "libmediainfo.0.dylib")
+                )
                 attachment_is_video = False
                 for track in attachment_media_file.tracks:
                     if track.track_type == "Video":
