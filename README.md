@@ -1,19 +1,19 @@
-# BitBar Plugins
+# macOS Menubar Plugins
 
-Collection of plugins written for the BitBar macOS menubar application, found [here](https://getbitbar.com).
+Collection of plugins originally written for the BitBar macOS menubar application, found [here](https://getbitbar.com), but now adapted to run in the SwiftBar macOS menubar application found [here](https://swiftbar.app) ([https://github.com/swiftbar/SwiftBar](https://github.com/swiftbar/SwiftBar))
 
 ## macOS iMessage/SMS Text Message Notifier
 
-![bitbar-text-messages.png](plugins/notifier/text/images/bitbar-text-messages.png)
+![menubar-text-messages.png](resources/images/menubar-text-messages.png)
 
-BitBar plugin to display macOS iMessage/SMS messages in the menubar.
+Menubar plugin to display macOS iMessage/SMS messages in the menubar.
 
 ---
 
 ## Reddit Message Notifier
 
-![bitbar-reddit-messages.png](plugins/notifier/reddit/images/bitbar-reddit-messages.png)
+![menubar-reddit-messages.png](resources/images/menubar-reddit-messages.png)
 
-BitBar plugin to display reddit inbox messages in the menubar.
+Menubar plugin to display reddit inbox messages in the menubar.
 
 ---
