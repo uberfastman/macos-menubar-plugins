@@ -216,7 +216,6 @@ def generate_output_read(local_dir, message_type, display_string):
     print("Refresh | font=HelveticaNeue-Italic color=#7FC3D8 refresh=true")
 
     # create data directory if it does not exist
-    print(local_dir)
     if not os.path.isdir(local_dir + "resources/data"):
         os.makedirs(local_dir + "resources/data")
 
