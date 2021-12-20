@@ -4,7 +4,7 @@ Collection of plugins originally written for the BitBar macOS menubar applicatio
 
 ## macOS iMessage/SMS Text Message Notifier
 
-![menubar-text-messages.png](resources/images/menubar-text-messages.png)
+![menubar-text-messages.png](resources/images/menubar_text_messages.png)
 
 Menubar plugin to display macOS iMessage/SMS messages in the menubar.
 
@@ -12,7 +12,7 @@ Menubar plugin to display macOS iMessage/SMS messages in the menubar.
 
 ## Reddit Message Notifier
 
-![menubar-reddit-messages.png](resources/images/menubar-reddit-messages.png)
+![menubar-reddit-messages.png](resources/images/menubar_reddit_messages.png)
 
 Menubar plugin to display reddit inbox messages in the menubar.
 
