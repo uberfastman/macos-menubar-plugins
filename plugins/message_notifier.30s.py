@@ -22,7 +22,7 @@ import json
 import logging
 import os
 import sqlite3
-import subprocess
+from subprocess import call, run, DEVNULL, PIPE, STDOUT
 import sys
 import textwrap
 import time
@@ -77,8 +77,7 @@ class Icons(object):
     def __init__(self, directory: Path, unread_count: int = 0):
 
         # check if macOS device is using a dark mode or light mode
-        if subprocess.call("defaults read -g AppleInterfaceStyle", shell=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0:
+        if call("defaults read -g AppleInterfaceStyle", shell=True, stdout=DEVNULL, stderr=STDOUT) == 0:
             macos_display_mode = "dark"
         else:
             macos_display_mode = "light"
@@ -97,6 +96,7 @@ class BaseMessage(object):
         self.id = df_row.id
         self.cid = df_row.cid
         self.title = df_row.title
+        self.raw_timestamp = df_row.timestamp
         self.timestamp = df_row.timestamp
         self.sender = df_row.sender
         self.body = df_row.body.replace('\n', ' ').replace('\r', '').strip()
@@ -148,6 +148,9 @@ class BaseConversation(object):
             )
         else:
             return "".join(participant for participant in self.participants)
+
+    def sort_messages(self, descending=True):
+        self.messages.sort(key=lambda x: x.raw_timestamp, reverse=descending)
 
     def __repr__(self):
         return str(vars(self))
@@ -229,13 +232,12 @@ def encode_image(image_file_path: Path, unread_count: int = 0):
     img = Image.open(image_file_path)
 
     # check if macOS device is using a retina screen
-    if subprocess.call("system_profiler SPDisplaysDataType | grep -i 'retina'", shell=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0:
+    if call("system_profiler SPDisplaysDataType | grep -i 'retina'", shell=True, stdout=DEVNULL, stderr=STDOUT) == 0:
         max_menubar_icon_height = 74
-        menubar_icon_font_size = 60
+        menubar_icon_font_size = 54
     else:
         max_menubar_icon_height = 37
-        menubar_icon_font_size = 30
+        menubar_icon_font_size = 27
 
     img_width, img_height = img.size
 
@@ -486,7 +488,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
     message_senders = set()
     message_num = 1
     for cid, conversation in conversations.items():
-        message_display_str = u" \u001b[37m| ansi=true refresh=true "
+        message_display_str = u"\u001b[37m | ansi=true refresh=true "
 
         if conversation.title:
             standard_output.append(
@@ -665,6 +667,7 @@ class TextOutput(BaseOutput):
         self.message_type = "text"
 
         self.macos_username = credentials.get("username")
+        self.macos_full_name = self._get_macos_full_name(self.macos_username)
 
         conn = sqlite3.connect(f"/Users/{self.macos_username}/Library/Messages/chat.db")
         self.cursor = conn.cursor()
@@ -892,6 +895,18 @@ class TextOutput(BaseOutput):
             LIMIT ? 
         """
 
+    @staticmethod
+    def _get_macos_full_name(macos_username):
+
+        output = run(["id", "-F", f"{macos_username}"], stdout=PIPE, stderr=PIPE, universal_newlines=True)
+        exit_code = output.returncode
+        standard_output = output.stdout
+
+        if exit_code == 0:
+            return standard_output.strip()
+        else:
+            return macos_username
+
     # noinspection PyTypeChecker,PyUnresolvedReferences
     def _get_messages(self):
         self.cursor.execute(self._sqlite_query_attach_contact_db())
@@ -948,6 +963,9 @@ class TextOutput(BaseOutput):
             else:
                 self.conversations.get(text_message.cid).add_message(text_message)
 
+        for conversation in self.conversations.values():  # type: TextConversation
+            conversation.sort_messages(descending=False)
+
     def get_console_output(self):
 
         self._get_messages()
@@ -955,7 +973,7 @@ class TextOutput(BaseOutput):
         display_str = f"bash={str(self.project_root_dir)}/resources/scripts/open_text_messages.sh terminal=false "
 
         if self.unread_count == 0:
-            return generate_output_read(self.project_root_dir, self.message_type, display_str, self.macos_username)
+            return generate_output_read(self.project_root_dir, self.message_type, display_str, self.macos_full_name)
 
         else:
             arg_dict = {
@@ -968,7 +986,7 @@ class TextOutput(BaseOutput):
 
             return generate_output_unread(
                 self.project_root_dir, self.message_type, display_str, self.unread_count, self.conversations,
-                MAX_LINE_CHARS, arg_dict, self.macos_username
+                MAX_LINE_CHARS, arg_dict, self.macos_full_name
             )
 
 
@@ -983,6 +1001,7 @@ class RedditMessage(BaseMessage):
     def __init__(self, df_row, max_line_characters, display_string):
         super().__init__(df_row, max_line_characters, display_string)
 
+        self.raw_timestamp = datetime.utcfromtimestamp(df_row.timestamp)
         self.timestamp = datetime.utcfromtimestamp(df_row.timestamp).strftime("%m-%d-%Y %H:%M:%S")
         utc_time_zone = tz.tzutc()
         local_time_zone = tz.tzlocal()
