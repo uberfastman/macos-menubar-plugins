@@ -5,9 +5,9 @@
 # <bitbar.version>v1.0.0</bitbar.version>
 # <bitbar.author>Wren J. R.</bitbar.author>
 # <bitbar.author.github>uberfastman</bitbar.author.github>
-# <bitbar.desc>Display unread Apple iMessages/SMS and unread Reddit messages in the macOS menubar!</bitbar.desc>
+# <bitbar.desc>Display unread messages from Apple iMessages/SMS, Reddit, and Telegram in the macOS menubar!</bitbar.desc>
 # <bitbar.image>https://github.com/uberfastman/local-bitbar-plugins/raw/develop/plugins/images/menubar-reddit-messages.png</bitbar.image>
-# <bitbar.dependencies>python3,pandas,pillow,praw,prawcore,pymediainfo,pync,python-dateutil,vobject</bitbar.dependencies>
+# <bitbar.dependencies>python3,pandas,pillow,praw,prawcore,pymediainfo,pync,python-dateutil,telethon,vobject</bitbar.dependencies>
 # <bitbar.abouturl>https://github.com/uberfastman/macos-menubar-plugins</bitbar.abouturl>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
@@ -22,7 +22,6 @@ import json
 import logging
 import os
 import sqlite3
-from subprocess import call, run, DEVNULL, PIPE, STDOUT
 import sys
 import textwrap
 import time
@@ -32,7 +31,8 @@ from datetime import datetime
 from importlib import util
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Set, List
+from subprocess import call, run, DEVNULL, PIPE, STDOUT
+from typing import Dict, Set, List, Union
 from urllib import parse
 from uuid import UUID
 
@@ -46,18 +46,26 @@ from pandas.errors import EmptyDataError
 from prawcore.exceptions import ResponseException, RequestException
 from pymediainfo import MediaInfo
 from pync import Notifier
+from telethon.sessions import StringSession
+# noinspection PyProtectedMember
+from telethon.sync import TelegramClient, Dialog, Message
+from telethon.tl.types import User
 
 sys.dont_write_bytecode = True
+
+# suppress telethon warning logs for attempt retries
+logging.getLogger("telethon.network.mtprotosender").setLevel(logging.ERROR)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ START SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 MAX_LINE_CHARS = 50
 MAX_GROUP_CHAT_SEARCH_RESULTS = 10  # The higher this number, the longer the app will take to run each time.
+MAX_GROUP_CHAT_PARTICIPANT_DISPLAY = 5
 THUMBNAIL_PIXEL_SIZE = 500
 TIMESTAMP_FONT_SIZE = 8
 LOG_LEVEL = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
-SUPPORTED_MESSAGE_TYPES = ["text", "reddit"]
+SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -186,8 +194,12 @@ class BaseOutput(ABC):
 
 
 # noinspection DuplicatedCode
-def format_timestamp(timestamp):
-    message_timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
+def format_timestamp(timestamp: Union[str, datetime]):
+
+    if type(timestamp) == str:
+        message_timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
+    else:
+        message_timestamp = timestamp
     message_timestamp_str = message_timestamp.strftime("%m-%d-%Y %I:%M:%S %p").lower()
 
     today = datetime.today()
@@ -274,6 +286,8 @@ def encode_image(image_file_path: Path, unread_count: int = 0):
         draw.text(position, unread_count_str, (255, 69, 0, 255), font=font)
 
         img.save(image_bytes, format="PNG")
+
+        # img.show()
 
         return base64.b64encode(image_bytes.getvalue()).decode("utf-8")
 
@@ -480,7 +494,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
 
     unread_message_count = sum([conv.get_message_count() for conv in conversations.values()])
     standard_output.append(
-        f"\u001b[32mUnread {message_type.capitalize()} messages for {user}: \u001b[31m{unread_message_count} "
+        f"\u001b[32mUnread {message_type.capitalize()} messages for {user}: \u001b[31m{unread_message_count}\u001b[37m "
         f"| ansi=true {display_string}"
     )
 
@@ -933,7 +947,7 @@ class TextOutput(BaseOutput):
         # recent_df = recent_df[["rowid", "cid"]]
 
         # display messages in reverse order they were received (newest to oldest, top to bottom)
-        unread_df.sort_values('timestamp', inplace=True, ascending=False)
+        unread_df.sort_values("timestamp", inplace=True, ascending=False)
 
         for row in unread_df.itertuples():
 
@@ -972,8 +986,11 @@ class TextOutput(BaseOutput):
 
         display_str = f"bash={str(self.project_root_dir)}/resources/scripts/open_text_messages.sh terminal=false "
 
+        standard_output = []
         if self.unread_count == 0:
-            return generate_output_read(self.project_root_dir, self.message_type, display_str, self.macos_full_name)
+            standard_output.extend(
+                generate_output_read(self.project_root_dir, self.message_type, display_str, self.macos_full_name)
+            )
 
         else:
             arg_dict = {
@@ -984,10 +1001,14 @@ class TextOutput(BaseOutput):
                 "sender": "com.apple.iChat"
             }
 
-            return generate_output_unread(
-                self.project_root_dir, self.message_type, display_str, self.unread_count, self.conversations,
-                MAX_LINE_CHARS, arg_dict, self.macos_full_name
+            standard_output.extend(
+                generate_output_unread(
+                    self.project_root_dir, self.message_type, display_str, self.unread_count, self.conversations,
+                    MAX_LINE_CHARS, arg_dict, self.macos_full_name
+                )
             )
+
+        return standard_output
 
 
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
@@ -1002,16 +1023,15 @@ class RedditMessage(BaseMessage):
         super().__init__(df_row, max_line_characters, display_string)
 
         self.raw_timestamp = datetime.utcfromtimestamp(df_row.timestamp)
-        self.timestamp = datetime.utcfromtimestamp(df_row.timestamp).strftime("%m-%d-%Y %H:%M:%S")
+
+        timestamp = datetime.utcfromtimestamp(df_row.timestamp).strftime("%m-%d-%Y %H:%M:%S")
         utc_time_zone = tz.tzutc()
         local_time_zone = tz.tzlocal()
-
-        self.timestamp = datetime.strptime(self.timestamp, "%m-%d-%Y %H:%M:%S")
-        self.timestamp = self.timestamp.replace(tzinfo=utc_time_zone)
-        self.timestamp = self.timestamp.astimezone(local_time_zone)
-        self.timestamp = self.timestamp.strftime("%m-%d-%Y %H:%M:%S")
-
-        self.timestamp = format_timestamp(str(self.timestamp))
+        timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
+        timestamp = timestamp.replace(tzinfo=utc_time_zone)
+        timestamp = timestamp.astimezone(local_time_zone)
+        timestamp = timestamp.strftime("%m-%d-%Y %H:%M:%S")
+        self.timestamp = format_timestamp(str(timestamp))
 
         self.recipient = df_row.recipient
         self.subreddit = df_row.subreddit
@@ -1050,7 +1070,7 @@ class RedditConversation(BaseConversation):
 # noinspection PyShadowingNames,DuplicatedCode
 class RedditOutput(BaseOutput):
 
-    def __init__(self, credentials: Dict, project_root_dir: Path):
+    def __init__(self, credentials: Union[Dict, List], project_root_dir: Path):
 
         self.project_root_dir = project_root_dir
         self.message_type = "reddit"
@@ -1114,7 +1134,7 @@ class RedditOutput(BaseOutput):
                 logger.debug(unread_df.to_string())
 
                 # display messages in reverse order they were received (newest to oldest, top to bottom)
-                unread_df.sort_values('timestamp', inplace=True, ascending=False)
+                unread_df.sort_values("timestamp", inplace=True, ascending=False)
 
                 conversations = OrderedDict()
                 for row in unread_df.itertuples():
@@ -1140,7 +1160,6 @@ class RedditOutput(BaseOutput):
         self._get_messages()
 
         standard_output = []
-        # reddit_account_count = 1
         for reddit_username, conversations in self.accounts_conversations.items():
 
             if len(conversations) == 0:
@@ -1177,11 +1196,178 @@ class RedditOutput(BaseOutput):
         if self.standard_error:
             standard_output.extend(self.standard_error)
 
-        standard_output.append("---")
-        standard_output.append("Refresh | font=HelveticaNeue-Italic color=#7FC3D8 refresh=true")
-        standard_output.append("---")
+        return standard_output
+
+
+# ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
+# ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ MENUBAR PLUGIN TELEGRAM CLASSES • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
+# ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
+
+
+# noinspection DuplicatedCode
+class TelegramMessage(BaseMessage):
+
+    def __init__(self, df_row, max_line_characters, display_string):
+        super().__init__(df_row, max_line_characters, display_string)
+
+        self.raw_timestamp = df_row.timestamp
+
+        timestamp = df_row.timestamp.strftime("%m-%d-%Y %H:%M:%S")
+        utc_time_zone = tz.tzutc()
+        local_time_zone = tz.tzlocal()
+        timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
+        timestamp = timestamp.replace(tzinfo=utc_time_zone)
+        timestamp = timestamp.astimezone(local_time_zone)
+        timestamp = timestamp.strftime("%m-%d-%Y %H:%M:%S")
+        self.timestamp = format_timestamp(str(timestamp))
+
+        self.id = str(df_row.id)
+        self.cid = str(df_row.cid)
+
+        self.context = f"?{df_row.context}" if df_row.context else ""
+
+        self.menubar_msg_display_str = f"href={sanitize_url(f'tg://openmessage{self.context}')}"
+
+
+class TelegramConversation(BaseConversation):
+
+    def __init__(self, telegram_message_obj):
+        super().__init__(telegram_message_obj)
+
+    def get_participants_str(self):
+        if self.is_group_conversation:
+            if len(self.participants) > MAX_GROUP_CHAT_PARTICIPANT_DISPLAY:
+                participants = ', '.join(
+                    participant for participant in list(self.participants)[:MAX_GROUP_CHAT_PARTICIPANT_DISPLAY]
+                )
+                return f"{participants}, ..."
+            else:
+                return f"{', '.join(participant for participant in self.participants)}"
+        else:
+            return f"{''.join(participant for participant in self.participants)}"
+
+
+# noinspection PyTypeChecker,PyShadowingNames
+class TelegramOutput(BaseOutput):
+
+    def __init__(self, credentials: Dict, project_root_dir: Path):
+
+        self.project_root_dir = project_root_dir
+        self.message_type = "telegram"
+
+        self.credentials = credentials
+        self.telegram_username = None
+
+        self.conversations = OrderedDict()
+        self.unread_count = 0
+
+        self.unread_display_str = "href=tg:// "
+
+    def _get_messages(self):
+
+        with TelegramClient(
+                StringSession(self.credentials.get("session_string")),
+                self.credentials.get("api_id"),
+                self.credentials.get("api_hash")) as client:  # type: TelegramClient
+
+            telegram_user = client.get_me()  # type: User
+            self.telegram_username = telegram_user.username
+
+            unread_df = pd.DataFrame(
+                columns=[
+                    "id", "cid", "title", "timestamp", "sender", "body", "media", "context"
+                ]
+            )
+
+            for dialog in client.iter_dialogs():  # type: Dialog
+                if not getattr(dialog.entity, "is_private", False) and dialog.unread_count > 0:
+                    self.unread_count += dialog.unread_count
+
+                    unread_count = dialog.unread_count
+                    for message in client.iter_messages(dialog.entity):  # type: Message
+
+                        sender = message.get_sender()  # type: User
+
+                        sender_name = ""
+                        if sender.first_name:
+                            sender_name += f"{sender.first_name} "
+                        if sender.last_name:
+                            sender_name += f"{sender.last_name} "
+                        if sender.username:
+                            sender_name += f"- {sender.username}"
+
+                        sender_name = sender_name.strip()
+
+                        unread_df.loc[len(unread_df)] = [
+                            message.id,
+                            dialog.id,
+                            dialog.name if dialog.is_channel else None,
+                            message.date,
+                            sender_name,
+                            message.message,
+                            None,
+                            # message.media,
+                            f"user_id={sender.id}&message_id={message.id}"
+                        ]
+
+                        unread_count -= 1
+                        if unread_count == 0:
+                            break
+
+            logger.debug(unread_df.to_string())
+
+            # display messages in reverse order they were received (newest to oldest, top to bottom)
+            unread_df.sort_values("timestamp", inplace=True, ascending=False)
+
+            for row in unread_df.itertuples():
+
+                # noinspection PyTypeChecker
+                unread_message = TelegramMessage(row, MAX_LINE_CHARS, self.unread_display_str)
+                if unread_message.cid not in self.conversations.keys():
+                    self.conversations[unread_message.cid] = TelegramConversation(unread_message)
+                else:
+                    self.conversations.get(unread_message.cid).add_message(unread_message)
+
+            for conversation in self.conversations.values():  # type: TelegramConversation
+                conversation.sort_messages(descending=False)
+
+    def get_console_output(self):
+
+        self._get_messages()
+
+        standard_output = []
+        if len(self.conversations) == 0:
+            standard_output.extend(
+                generate_output_read(
+                    self.project_root_dir,
+                    self.message_type,
+                    "href=tg://",
+                    self.telegram_username
+                )
+            )
+
+        else:
+            arg_dict = {
+                "appIcon": self.project_root_dir / "resources" / "images" / "telegram_icon.png",
+                "open": "tg://",
+                "sound": "Glass"
+            }
+
+            standard_output.extend(
+                generate_output_unread(
+                    self.project_root_dir,
+                    self.message_type,
+                    self.unread_display_str,
+                    self.unread_count,
+                    self.conversations,
+                    MAX_LINE_CHARS,
+                    arg_dict,
+                    self.telegram_username
+                )
+            )
 
         return standard_output
+
 
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ MENUBAR PLUGIN MAIN • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
@@ -1200,7 +1386,7 @@ if __name__ == "__main__":
     standard_output = []
     for message_account_type in SUPPORTED_MESSAGE_TYPES:  # type: str
 
-        spec = util.spec_from_file_location("message_notifier", Path(__file__).parent / "message_notifier.30s.py")
+        spec = util.spec_from_file_location("message_notifier", Path(__file__).parent / "message_notifier.1m.py")
         py_module = util.module_from_spec(spec)
         spec.loader.exec_module(py_module)
 
@@ -1209,6 +1395,10 @@ if __name__ == "__main__":
 
         standard_output.extend(message_account_output.get_console_output())
         unread_count += message_account_output.get_unread_count()
+
+    standard_output.append("---")
+    standard_output.append("Refresh | font=HelveticaNeue-Italic color=#7FC3D8 refresh=true")
+    standard_output.append("---")
 
     if unread_count > 0:
         unread_icon = Icons(project_root, unread_count).unread_icon
