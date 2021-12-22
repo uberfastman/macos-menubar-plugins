@@ -483,18 +483,19 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
 # noinspection PyUnresolvedReferences,PyShadowingNames,PyListCreation,DuplicatedCode
 def generate_output_unread(local_dir: Path, message_type: str, display_string: str, unread: int,
                            conversations: Dict[str, BaseConversation], max_line_characters: int, arguments: Dict,
-                           user: str, all_unread_message_senders: Set = None):
+                           username: str, user: str = None, all_unread_message_senders: Set = None):
 
     standard_output = []
     standard_output.append("---")
     standard_output.append(
-        f"Go to {message_type.capitalize()} messages for {user} ↗︎️ "
+        f"Go to {message_type.capitalize()} messages for {user if user else username} ↗︎️ "
         f"| font=HelveticaNeue-Italic color=#e05415 {display_string}"
     )
 
     unread_message_count = sum([conv.get_message_count() for conv in conversations.values()])
     standard_output.append(
-        f"\u001b[32mUnread {message_type.capitalize()} messages for {user}: \u001b[31m{unread_message_count}\u001b[37m "
+        f"\u001b[32mUnread {message_type.capitalize()} messages for "
+        f"{user if user else username}: \u001b[31m{unread_message_count}\u001b[37m "
         f"| ansi=true {display_string}"
     )
 
@@ -587,7 +588,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
             if conversation.messages.index(message) != (len(conversation.messages) - 1):
                 standard_output.append(f"--{'⠀'}| size=2")  # Unicode character '⠀' (U+2800) for blank lines
 
-            message_ids.add(str.lower(message.id))
+            message_ids.add(str(message.id).lower())
             message_senders.add(message.sender)
 
         standard_output.append("-----")
@@ -600,22 +601,22 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
 
     processed_messages = set()
     try:
-        processed_messages = set(
-            pd.read_csv(data_dir / f"{message_type}_{user.lower()}_messages_processed.csv")["uuid"].tolist())
+        uuids = pd.read_csv(data_dir / f"{message_type}_{username.lower()}_messages_processed.csv")["uuid"].tolist()
+        processed_messages = set([str(message_id).lower() for message_id in uuids])
     except FileNotFoundError:
         logger.debug(
-            f"File {message_type}_{user.lower()}_messages_processed.csv does not exist, and will be created."
+            f"File {message_type}_{username.lower()}_messages_processed.csv does not exist, and will be created."
         )
     except EmptyDataError:
         logger.debug(
-            f"File {message_type}_{user.lower()}_messages_processed.csv is empty, and will be populated with any "
+            f"File {message_type}_{username.lower()}_messages_processed.csv is empty, and will be populated with any "
             f"current unread message UUIDs."
         )
 
     if not message_ids.issubset(processed_messages):
         message_ids_series = pd.Series(list(message_ids))
         message_ids_series.to_csv(
-            data_dir / f"{message_type}_{user.lower()}_messages_processed.csv", header=["uuid"]
+            data_dir / f"{message_type}_{username.lower()}_messages_processed.csv", header=["uuid"]
         )
 
         # send_macos_notification(unread, message_senders, "Messages", arguments)
@@ -994,17 +995,14 @@ class TextOutput(BaseOutput):
 
         else:
             arg_dict = {
-                # "appIcon": local_dir + "notifier/" + message_type_str + "/images/MessagesAppIcon.png",
-                # "activate": "com.apple.iChat",
-                # "execute": "open -a Messages",
-                # "sound": "Glass"
-                "sender": "com.apple.iChat"
+                "contentImage": self.project_root_dir / "resources" / "images" / "icon_text.png",
+                "sound": "Glass",
             }
 
             standard_output.extend(
                 generate_output_unread(
                     self.project_root_dir, self.message_type, display_str, self.unread_count, self.conversations,
-                    MAX_LINE_CHARS, arg_dict, self.macos_full_name
+                    MAX_LINE_CHARS, arg_dict, self.macos_username, user=self.macos_full_name
                 )
             )
 
@@ -1174,8 +1172,7 @@ class RedditOutput(BaseOutput):
 
             else:
                 arg_dict = {
-                    "appIcon": self.project_root_dir / "resources" / "images" / "reddit_icon.png",
-                    "open": "https://www.reddit.com/message/inbox/",
+                    "contentImage": self.project_root_dir / "resources" / "images" / "icon_reddit.png",
                     "sound": "Glass"
                 }
 
@@ -1294,7 +1291,7 @@ class TelegramOutput(BaseOutput):
                         if sender.last_name:
                             sender_name += f"{sender.last_name} "
                         if sender.username:
-                            sender_name += f"- {sender.username}"
+                            sender_name += f"({sender.username})"
 
                         sender_name = sender_name.strip()
 
@@ -1348,9 +1345,8 @@ class TelegramOutput(BaseOutput):
 
         else:
             arg_dict = {
-                "appIcon": self.project_root_dir / "resources" / "images" / "telegram_icon.png",
-                "open": "tg://",
-                "sound": "Glass"
+                "contentImage": self.project_root_dir / "resources" / "images" / "icon_telegram.png",
+                "sound": "Glass",
             }
 
             standard_output.extend(
