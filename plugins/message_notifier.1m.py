@@ -5,7 +5,7 @@
 # <bitbar.version>v1.0.0</bitbar.version>
 # <bitbar.author>Wren J. R.</bitbar.author>
 # <bitbar.author.github>uberfastman</bitbar.author.github>
-# <bitbar.desc>Display unread messages from Apple iMessages/SMS, Reddit, and Telegram in the macOS menubar!</bitbar.desc>
+# <bitbar.desc>Display unread messages from iMessages/SMS, Reddit, and Telegram in the macOS menubar!</bitbar.desc>
 # <bitbar.image>https://github.com/uberfastman/local-bitbar-plugins/raw/develop/plugins/images/menubar-reddit-messages.png</bitbar.image>
 # <bitbar.dependencies>python3,pandas,pillow,praw,prawcore,pymediainfo,pync,python-dateutil,telethon,vobject</bitbar.dependencies>
 # <bitbar.abouturl>https://github.com/uberfastman/macos-menubar-plugins</bitbar.abouturl>
@@ -74,6 +74,32 @@ SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=LOG_LEVEL)
 
+# reference: https://chrisyeh96.github.io/2020/03/28/terminal-colors.html
+ANSI_BLACK = "\u001b[30m"
+ANSI_RED = "\u001b[31m"
+ANSI_GREEN = "\u001b[32m"
+ANSI_YELLOW = "\u001b[33m"
+ANSI_BLUE = "\u001b[34m"
+ANSI_MAGENTA = "\u001b[35m"
+ANSI_CYAN = "\u001b[36m"
+ANSI_WHITE = "\u001b[37m"
+
+ANSI_BLACK_BG = "\u001b[40m"
+ANSI_RED_BG = "\u001b[41m"
+ANSI_GREEN_BG = "\u001b[42m"
+ANSI_YELLOW_BG = "\u001b[43m"
+ANSI_BLUE_BG = "\u001b[44m"
+ANSI_MAGENTA_BG = "\u001b[45m"
+ANSI_CYAN_BG = "\u001b[46m"
+ANSI_WHITE_BG = "\u001b[47m"
+
+ANSI_OFF = "\u001b[0m"
+
+HEX_ORANGE = "#e05415"
+HEX_BLUE = "#7FC3D8"
+
+CSS_TEAL = "teal"
+
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • MENUBAR PLUGIN BASE CLASSES ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
@@ -128,7 +154,7 @@ class BaseConversation(object):
 
     def __init__(self, message_obj):
         self.id = message_obj.cid
-        self.title = f"\u001b[39m{message_obj.title}\u001b[33m" if message_obj.title else ""
+        self.title = f"{ANSI_OFF}{message_obj.title}{ANSI_YELLOW}" if message_obj.title else ""
         self.messages = [message_obj]
         self.participants = {message_obj.sender}
         self.is_group_conversation = False
@@ -141,7 +167,7 @@ class BaseConversation(object):
             if len(self.participants) > 1:
                 self.is_group_conversation = True
                 if not self.title:
-                    self.title = "\u001b[39mGroup Message\u001b[33m"
+                    self.title = f"{ANSI_OFF}Group Message{ANSI_YELLOW}"
         else:
             raise ValueError("Cannot add Message with mismatching id to Conversation!")
 
@@ -465,7 +491,8 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
     standard_output = []
     standard_output.append("---")
     standard_output.append(
-        f"No unread {message_type.capitalize()} messages for {user}! (Go to messages ↗︎️) | color=teal {display_string}"
+        f"No unread {message_type.capitalize()} messages for {user}! (Go to messages ↗︎️) "
+        f"| color={CSS_TEAL} {display_string}"
     )
 
     # create data directory if it does not exist
@@ -489,13 +516,13 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
     standard_output.append("---")
     standard_output.append(
         f"Go to {message_type.capitalize()} messages for {user if user else username} ↗︎️ "
-        f"| font=HelveticaNeue-Italic color=#e05415 {display_string}"
+        f"| font=HelveticaNeue-Italic color={HEX_ORANGE} {display_string}"
     )
 
     unread_message_count = sum([conv.get_message_count() for conv in conversations.values()])
     standard_output.append(
-        f"\u001b[32mUnread {message_type.capitalize()} messages for "
-        f"{user if user else username}: \u001b[31m{unread_message_count}\u001b[37m "
+        f"{ANSI_GREEN}Unread {message_type.capitalize()} messages for "
+        f"{user if user else username}: {ANSI_RED}{unread_message_count}{ANSI_OFF} "
         f"| ansi=true {display_string}"
     )
 
@@ -503,7 +530,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
     message_senders = set()
     message_num = 1
     for cid, conversation in conversations.items():
-        message_display_str = u"\u001b[37m | ansi=true refresh=true "
+        message_display_str = f"{ANSI_OFF} | ansi=true refresh=true "
 
         if conversation.title:
             standard_output.append(
@@ -511,29 +538,30 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
             )
 
         standard_output.append(
-            f"--\u001b[33m{conversation.get_participants_str()}{message_display_str}"
+            f"--{ANSI_YELLOW}{conversation.get_participants_str()}{message_display_str}"
             f"{conversation.menubar_msg_display_str}"
         )
 
         for message in conversation.messages:  # type: BaseMessage
 
             timestamp_display_str = (
-                f"--\u001b[36m{message.timestamp}\u001b[32m{message_display_str}{message.menubar_msg_display_str} "
+                f"--{ANSI_CYAN}{message.timestamp}{ANSI_GREEN}{message_display_str}{message.menubar_msg_display_str} "
                 f"size={str(TIMESTAMP_FONT_SIZE)}"
             )
-            msg_sender_start_str = f"--\u001b[31m({message.sender}) \u001b[32m"
-            msg_format_str = u"--\u001b[32m"
+            msg_sender_start_str = f"--{ANSI_RED}({message.sender}) {ANSI_GREEN}"
+            msg_format_str = f"--{ANSI_GREEN}"
 
             if message.attachment == 1:
                 if message.get_message_len() == 0:
                     msg_attachment_str = (
-                        f"\u001b[35m(attachment{(' - ' + message.attchtype) if message.attchtype else ''}) \u001b[32m"
+                        f"{ANSI_MAGENTA}(attachment{(' - ' + message.attchtype) if message.attchtype else ''}) "
+                        f"{ANSI_GREEN}"
                     )
                 else:
                     # TODO: handle messages that are longer than the max_line_chars with video attachments
                     msg_attachment_str = (
-                        f"{message.body} \u001b[35m"
-                        f"(attachment{f' - {message.attchtype}' if message.attchtype else ''}) \u001b[32m"
+                        f"{message.body} {ANSI_MAGENTA}"
+                        f"(attachment{f' - {message.attchtype}' if message.attchtype else ''}) {ANSI_GREEN}"
                     )
 
                 if conversation.is_group_conversation:
@@ -553,7 +581,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                     else:
                         for line in message.attchfile:
                             standard_output.append(
-                                f"----\u001b[37m\u001b[49m{line}{message_display_str}{message.menubar_msg_display_str}"
+                                f"----{ANSI_OFF}{line}{message_display_str}{message.menubar_msg_display_str}"
                             )
 
             elif message.get_message_len() > max_line_characters:
@@ -570,7 +598,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                     )
                 for line in message.body_wrapped:
                     standard_output.append(
-                        f"----\u001b[37m\u001b[49m{line}{message_display_str}{message.menubar_msg_display_str}"
+                        f"----{ANSI_OFF}{line}{message_display_str}{message.menubar_msg_display_str}"
                     )
 
             else:
@@ -670,7 +698,7 @@ class TextConversation(BaseConversation):
                 self.participants.add(
                     df_row.sender if df_row.sender else (df_row.org if df_row.org else df_row.contact))
             if not self.title:
-                self.title = "\u001b[39mGroup Message\u001b[33m"
+                self.title = f"{ANSI_OFF}Group Message{ANSI_YELLOW}"
 
 
 # noinspection PyShadowingNames,SqlSignature
@@ -1051,9 +1079,9 @@ class RedditConversation(BaseConversation):
     def __init__(self, reddit_message_obj):
         super().__init__(reddit_message_obj)
         if reddit_message_obj.comment:
-            self.type_str = "\u001b[31m (comment)\u001b[39m"
+            self.type_str = f"{ANSI_RED} (comment){ANSI_OFF}"
         else:
-            self.type_str = "\u001b[31m (message)\u001b[39m"
+            self.type_str = f"{ANSI_RED} (message){ANSI_OFF}"
 
     def get_participants_str(self):
         if self.is_group_conversation:
@@ -1150,7 +1178,7 @@ class RedditOutput(BaseOutput):
                 self.standard_error.extend([
                     "---",
                     "❗",
-                    f"--\u001b[31mUNABLE TO RETRIEVE REDDIT ACCOUNT CONTENT WITH ERROR: {repr(e)}! | ansi=true"
+                    f"--{ANSI_RED}UNABLE TO RETRIEVE REDDIT ACCOUNT CONTENT WITH ERROR: {repr(e)}! | ansi=true"
                 ])
 
     def get_console_output(self):
@@ -1393,12 +1421,12 @@ if __name__ == "__main__":
         unread_count += message_account_output.get_unread_count()
 
     standard_output.append("---")
-    standard_output.append("Refresh | font=HelveticaNeue-Italic color=#7FC3D8 refresh=true")
+    standard_output.append(F"Refresh | font=HelveticaNeue-Italic color={HEX_BLUE} refresh=true")
     standard_output.append("---")
 
     if unread_count > 0:
         unread_icon = Icons(project_root, unread_count).unread_icon
-        print(f"| color=#e05415 image={unread_icon}")
+        print(f"| color={HEX_ORANGE} image={unread_icon}")
     else:
         all_read_icon = Icons(project_root).all_read_icon
         print(f"|image={all_read_icon} dropdown=false")
