@@ -1,5 +1,4 @@
 import json
-import logging
 from pathlib import Path
 
 from telethon.sessions import StringSession
@@ -7,9 +6,6 @@ from telethon.sessions import StringSession
 from telethon.sync import Dialog, Message
 from telethon.sync import TelegramClient
 from telethon.tl.types import User
-
-# suppress telethon warning logs for attempt retries
-logging.getLogger("telethon.network.mtprotosender").setLevel(logging.INFO)
 
 credentials_path = Path(__file__).parent.parent.parent / "resources" / "credentials" / "private.json"
 
