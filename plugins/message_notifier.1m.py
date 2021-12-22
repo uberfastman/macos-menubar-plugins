@@ -985,16 +985,18 @@ class TextOutput(BaseOutput):
                 script_params = ""
             else:
                 open_script = "open_text_messages_to_conversation.sh"
-                script_params = f"param1={row.cid} "
+                script_params = f"param1={row.cid}"
 
-            conversation_deep_link = (
-                f"bash={str(self.project_root_dir)}/resources/scripts/{open_script} {script_params}terminal=false "
+            deep_link_conversation = (
+                f"bash={str(self.project_root_dir)}/resources/scripts/{open_script} {script_params} "
+                f"terminal=false "
+                f"tooltip='Open Messages to this conversation'"
             )
 
             text_message = TextMessage(
                 row,
                 MAX_LINE_CHARS,
-                conversation_deep_link
+                deep_link_conversation
             )
             if text_message.cid not in self.conversations.keys():
                 self.conversations[text_message.cid] = TextConversation(
@@ -1013,12 +1015,21 @@ class TextOutput(BaseOutput):
 
         self._get_messages()
 
-        display_str = f"bash={str(self.project_root_dir)}/resources/scripts/open_text_messages.sh terminal=false "
+        display_str = (
+            f"bash={str(self.project_root_dir)}/resources/scripts/open_text_messages.sh "
+            f"terminal=false "
+            f"tooltip='Open Messages'"
+        )
 
         standard_output = []
         if self.unread_count == 0:
             standard_output.extend(
-                generate_output_read(self.project_root_dir, self.message_type, display_str, self.macos_full_name)
+                generate_output_read(
+                    self.project_root_dir,
+                    self.message_type,
+                    display_str,
+                    self.macos_full_name
+                )
             )
 
         else:
@@ -1029,8 +1040,15 @@ class TextOutput(BaseOutput):
 
             standard_output.extend(
                 generate_output_unread(
-                    self.project_root_dir, self.message_type, display_str, self.unread_count, self.conversations,
-                    MAX_LINE_CHARS, arg_dict, self.macos_username, user=self.macos_full_name
+                    self.project_root_dir,
+                    self.message_type,
+                    display_str,
+                    self.unread_count,
+                    self.conversations,
+                    MAX_LINE_CHARS,
+                    arg_dict,
+                    self.macos_username,
+                    user=self.macos_full_name
                 )
             )
 
@@ -1071,7 +1089,8 @@ class RedditMessage(BaseMessage):
         else:
             self.context = f"/message/messages/{df_row.id}"
 
-        self.menubar_msg_display_str = f"href={sanitize_url(f'https://www.reddit.com{self.context}')}"
+        link_unread_message = sanitize_url(f"https://www.reddit.com{self.context}")
+        self.menubar_msg_display_str = f"href={link_unread_message} tooltip={link_unread_message} "
 
 
 class RedditConversation(BaseConversation):
@@ -1109,7 +1128,8 @@ class RedditOutput(BaseOutput):
 
         self.accounts_conversations = {}  # type: Dict[str, OrderedDict]
         self.unread_count = 0
-        self.unread_display_str = "href=https://www.reddit.com/message/unread/ "
+        link_unread = "https://www.reddit.com/message/unread/"
+        self.unread_display_str = f"href={link_unread} tooltip={link_unread} "
         self.all_unread_message_senders = set()
 
         self.standard_error = []
@@ -1185,6 +1205,8 @@ class RedditOutput(BaseOutput):
 
         self._get_messages()
 
+        reddit_link = "https://www.reddit.com/message/inbox/"
+
         standard_output = []
         for reddit_username, conversations in self.accounts_conversations.items():
 
@@ -1193,7 +1215,7 @@ class RedditOutput(BaseOutput):
                     generate_output_read(
                         self.project_root_dir,
                         self.message_type,
-                        "href=https://www.reddit.com/message/inbox/",
+                        f"href={reddit_link} tooltip={reddit_link}",
                         reddit_username
                     )
                 )
@@ -1251,7 +1273,8 @@ class TelegramMessage(BaseMessage):
 
         self.context = f"?{df_row.context}" if df_row.context else ""
 
-        self.menubar_msg_display_str = f"href={sanitize_url(f'tg://openmessage{self.context}')}"
+        deep_link_unread_message = sanitize_url(f"tg://openmessage{self.context}")
+        self.menubar_msg_display_str = f"href={deep_link_unread_message} tooltip={deep_link_unread_message} "
 
 
 class TelegramConversation(BaseConversation):
@@ -1286,7 +1309,8 @@ class TelegramOutput(BaseOutput):
         self.conversations = OrderedDict()
         self.unread_count = 0
 
-        self.unread_display_str = "href=tg:// "
+        telegram_deep_link = "tg://"
+        self.unread_display_str = f"href={telegram_deep_link} tooltip={telegram_deep_link} "
 
     def _get_messages(self):
 
@@ -1360,13 +1384,15 @@ class TelegramOutput(BaseOutput):
 
         self._get_messages()
 
+        telegram_deep_link = "tg://"
+
         standard_output = []
         if len(self.conversations) == 0:
             standard_output.extend(
                 generate_output_read(
                     self.project_root_dir,
                     self.message_type,
-                    "href=tg://",
+                    f"href={telegram_deep_link} tooltip={telegram_deep_link}",
                     self.telegram_username
                 )
             )
