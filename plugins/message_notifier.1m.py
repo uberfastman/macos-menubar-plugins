@@ -38,6 +38,7 @@ from uuid import UUID
 
 import pandas as pd
 import praw
+import pyheif
 import vobject
 from PIL import Image, ExifTags, ImageFilter, ImageDraw, ImageFont
 from cv2 import VideoCapture, imencode
@@ -53,8 +54,16 @@ from telethon.tl.types import User
 
 sys.dont_write_bytecode = True
 
-# suppress telethon warning logs for attempt retries
+# suppress dependency library logs ror running
 logging.getLogger("telethon.network.mtprotosender").setLevel(logging.ERROR)
+
+# suppress dependency library logs ror debugging
+logging.getLogger("telethon.extensions.messagepacker").setLevel(logging.WARN)
+logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARN)
+logging.getLogger("PIL.TiffImagePlugin").setLevel(logging.WARN)
+logging.getLogger("prawcore").setLevel(logging.WARN)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.WARN)
+logging.getLogger("asyncio").setLevel(logging.WARN)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ START SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -66,6 +75,9 @@ THUMBNAIL_PIXEL_SIZE = 500
 TIMESTAMP_FONT_SIZE = 8
 LOG_LEVEL = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
 SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
+# SUPPORTED_MESSAGE_TYPES = ["text"]
+# SUPPORTED_MESSAGE_TYPES = ["reddit"]
+# SUPPORTED_MESSAGE_TYPES = ["telegram"]
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -99,6 +111,9 @@ HEX_ORANGE = "#e05415"
 HEX_BLUE = "#7FC3D8"
 
 CSS_TEAL = "teal"
+CSS_GRAY = "gray"
+
+FONT_ITALIC = "HelveticaNeue-Italic"
 
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • MENUBAR PLUGIN BASE CLASSES ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
@@ -221,7 +236,6 @@ class BaseOutput(ABC):
 
 # noinspection DuplicatedCode
 def format_timestamp(timestamp: Union[str, datetime]):
-
     if type(timestamp) == str:
         message_timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
     else:
@@ -245,10 +259,14 @@ def format_timestamp(timestamp: Union[str, datetime]):
             return f"{message_timestamp_str} (Today - {hour_delta} hour{'s' if hour_delta > 1 else ''} ago)"
     else:
         day_delta = (today.date() - message_timestamp.date()).days
-        # print("today:", today)
-        # print("message timestamp:", message_timestamp)
-        # print(today - message_timestamp)
-        # print("day delta:", day_delta)
+        logger.debug(
+            f"\n"
+            f"Message time delivery info:\n"
+            f"              Today: {today}\n"
+            f"          Timestamp: {message_timestamp}\n"
+            f"    Diff from today: {today - message_timestamp}\n"
+            f"          Day delta: {day_delta}\n"
+        )
         if day_delta == 1:
             weekday_str = "Yesterday"
         else:
@@ -256,7 +274,7 @@ def format_timestamp(timestamp: Union[str, datetime]):
         return f"{message_timestamp_str} ({weekday_str} - {day_delta} day{'s' if day_delta > 1 else ''} ago)"
 
 
-def sanitize_url(url_str):
+def sanitize_url(url_str: str):
     url = parse.urlsplit(url_str)
     url = list(url)
     url[2] = parse.quote(url[2])
@@ -265,7 +283,6 @@ def sanitize_url(url_str):
 
 # noinspection PyShadowingNames
 def encode_image(image_file_path: Path, unread_count: int = 0):
-
     image_bytes = BytesIO()
     img = Image.open(image_file_path)
 
@@ -323,6 +340,52 @@ def encode_image(image_file_path: Path, unread_count: int = 0):
     return base64.b64encode(image_bytes.getvalue()).decode("utf-8")
 
 
+def convert_image_to_bytes(output: BytesIO, image: Image, image_format: str, max_size: int = THUMBNAIL_PIXEL_SIZE,
+                           optimize: bool = False, quality: int = 100, conversion_attempts: int = 1):
+
+    image.thumbnail((max_size, max_size), Image.ANTIALIAS)
+    image_format = image_format.upper()
+
+    if image_format == "GIF":
+        # image.save(output, save_all=True, format=image_format, optimize=optimize, quality=quality)
+        image.save(output, format="PNG", optimize=optimize, quality=quality)
+    elif image_format == "HEIC":
+        image.save(output, format="JPEG", optimize=optimize, quality=25)
+    else:
+        image.save(output, format=image_format, optimize=optimize, quality=quality)
+
+    img_data = output.getvalue()
+    thumb_str = base64.b64encode(img_data).decode("utf-8")
+
+    logger.debug(
+        f"\n"
+        f"Image conversion attempt {conversion_attempts} for {image_format}:\n"
+        f"         Max size: {max_size}\n"
+        f"          Quality: {quality}\n"
+        f"    Thumb str len: {len(thumb_str)}\n"
+    )
+
+    if conversion_attempts <= 9:
+        file_byte_size_cutoff = 10000
+        if len(thumb_str) > file_byte_size_cutoff:
+            output, thumb_str, attachment_has_image_thumbnail = convert_image_to_bytes(
+                BytesIO(),
+                image,
+                image_format,
+                max_size=max_size - 50,
+                optimize=True,
+                quality=quality - 10,
+                conversion_attempts=conversion_attempts + 1
+            )
+        else:
+            attachment_has_image_thumbnail = True
+    else:
+        thumb_str = None
+        attachment_has_image_thumbnail = False
+
+    return output, thumb_str, attachment_has_image_thumbnail
+
+
 # noinspection DuplicatedCode
 def encode_attachment(message_row):
     path_str = message_row.attchfile
@@ -357,6 +420,9 @@ def encode_attachment(message_row):
 
             else:
                 output = BytesIO()
+                img = None
+                img_format = None
+                thumb_str = None
 
                 # retrievable at /Applications/MediaInfo.app/Contents/Resources/libmediainfo.dylib
                 mediainfo_dylib = str(Path(__file__).resolve().parent.parent / "resources" / "libmediainfo.dylib")
@@ -408,27 +474,24 @@ def encode_attachment(message_row):
                         y = int((frame_img_height - watermark_img_height) / 2)
                         position = (x, y)
 
-                        frame_img_with_watermark = Image.new("RGBA", frame_img.size, (0, 0, 0, 0))
-                        frame_img_with_watermark.paste(frame_img, (0, 0))
-                        frame_img_with_watermark.paste(watermark_img, position, mask=watermark_img)
-                        frame_img_with_watermark = frame_img_with_watermark.convert("RGB")
-
-                        # frame_img_with_watermark.show()
-                        output = BytesIO()
-                        frame_img_with_watermark.save(output, format="PNG")
+                        img = Image.new("RGBA", frame_img.size, (0, 0, 0, 0))
+                        img.paste(frame_img, (0, 0))
+                        img.paste(watermark_img, position, mask=watermark_img)
+                        img = img.convert("RGB")
+                        img_format = "PNG"
 
                     else:
                         img = Image.open(video_file_icon_path)
-                        img.save(output, format="PNG")
-                else:
-                    img = Image.open(path_str)
+                        img_format = "PNG"
 
+                else:
                     if mime_type == "image/jpeg":
                         orientation = 0
                         for key in ExifTags.TAGS.keys():
                             if ExifTags.TAGS[key] == "Orientation":
                                 orientation = key
 
+                        img = Image.open(path_str)
                         if hasattr(img, "_getexif"):  # only present in JPEGs
                             try:
                                 # noinspection PyProtectedMember
@@ -445,23 +508,38 @@ def encode_attachment(message_row):
                             except KeyError:
                                 img = img
 
-                            img.thumbnail((THUMBNAIL_PIXEL_SIZE, THUMBNAIL_PIXEL_SIZE), Image.ANTIALIAS)
-                            img.save(output, format="JPEG")
+                            img_format = "JPEG"
 
                     elif mime_type == "image/gif":
-                        img.save(output, save_all=True, format="GIF")
+                        pass
+                        # img = Image.open(path_str)
+                        # img_format = "GIF"
 
                     elif mime_type == "image/png":
-                        img.save(output, format="PNG")
+                        # pass
+                        img = Image.open(path_str)
+                        img_format = "PNG"
+
+                    elif mime_type == "image/heic":
+                        # pass
+                        heif_file = pyheif.read(path_str)
+
+                        img = Image.frombytes(
+                            heif_file.mode,
+                            heif_file.size,
+                            heif_file.data,
+                            "raw",
+                            heif_file.mode,
+                            heif_file.stride,
+                        )
+                        img_format = "HEIC"
 
                     else:
                         # TODO: handle more image MIME types
                         pass
 
-                img_data = output.getvalue()
-
-                thumb_str = base64.b64encode(img_data).decode("utf-8")
-                attachment_has_image_thumbnail = True
+                if img_format:
+                    output, thumb_str, attachment_has_image_thumbnail = convert_image_to_bytes(output, img, img_format)
 
                 return thumb_str, attachment_has_image_thumbnail
 
@@ -487,7 +565,6 @@ def send_macos_notification(unread, message_senders, title, arguments):
 
 # noinspection PyShadowingNames,PyListCreation
 def generate_output_read(local_dir: Path, message_type: str, display_string: str, user: str):
-
     standard_output = []
     standard_output.append("---")
     standard_output.append(
@@ -511,12 +588,11 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
 def generate_output_unread(local_dir: Path, message_type: str, display_string: str, unread: int,
                            conversations: Dict[str, BaseConversation], max_line_characters: int, arguments: Dict,
                            username: str, user: str = None, all_unread_message_senders: Set = None):
-
     standard_output = []
     standard_output.append("---")
     standard_output.append(
         f"Go to {message_type.capitalize()} messages for {user if user else username} ↗︎️ "
-        f"| font=HelveticaNeue-Italic color={HEX_ORANGE} {display_string}"
+        f"| font={FONT_ITALIC} color={HEX_ORANGE} {display_string}"
     )
 
     unread_message_count = sum([conv.get_message_count() for conv in conversations.values()])
@@ -554,14 +630,15 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
             if message.attachment == 1:
                 if message.get_message_len() == 0:
                     msg_attachment_str = (
-                        f"{ANSI_MAGENTA}(attachment{(' - ' + message.attchtype) if message.attchtype else ''}) "
+                        f"{ANSI_MAGENTA}"
+                        f"(attachment{(' - ' + message.attachment_type) if message.attachment_type else ''}) "
                         f"{ANSI_GREEN}"
                     )
                 else:
                     # TODO: handle messages that are longer than the max_line_chars with video attachments
                     msg_attachment_str = (
                         f"{message.body} {ANSI_MAGENTA}"
-                        f"(attachment{f' - {message.attchtype}' if message.attchtype else ''}) {ANSI_GREEN}"
+                        f"(attachment{f' - {message.attachment_type}' if message.attachment_type else ''}) {ANSI_GREEN}"
                     )
 
                 if conversation.is_group_conversation:
@@ -575,11 +652,13 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                     standard_output.append(
                         f"{msg_format_str}{msg_attachment_str}{message_display_str}{message.menubar_msg_display_str}"
                     )
-                if message.attchfile:
-                    if message.attchhasthumb:
-                        standard_output.append(f"----| image={message.attchfile} {message.menubar_msg_display_str}")
+                if message.attachment_file:
+                    if message.attachment_has_thumbnail:
+                        standard_output.append(
+                            f"----| image={message.attachment_file} {message.menubar_msg_display_str}"
+                        )
                     else:
-                        for line in message.attchfile:
+                        for line in message.attachment_file:
                             standard_output.append(
                                 f"----{ANSI_OFF}{line}{message_display_str}{message.menubar_msg_display_str}"
                             )
@@ -601,6 +680,13 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                         f"----{ANSI_OFF}{line}{message_display_str}{message.menubar_msg_display_str}"
                     )
 
+            elif message.get_message_len() == 0:
+                standard_output.append(timestamp_display_str)
+                standard_output.append(
+                    f"--No message content"
+                    f"| {message.menubar_msg_display_str} color={CSS_GRAY} font={FONT_ITALIC}"
+                )
+
             else:
                 if conversation.is_group_conversation:
                     standard_output.append(timestamp_display_str)
@@ -614,7 +700,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                     )
 
             if conversation.messages.index(message) != (len(conversation.messages) - 1):
-                standard_output.append(f"--{'⠀'}| size=2")  # Unicode character '⠀' (U+2800) for blank lines
+                standard_output.append(f"--{'⠀'} | size=2")  # Unicode character '⠀' (U+2800) for blank lines
 
             message_ids.add(str(message.id).lower())
             message_senders.add(message.sender)
@@ -674,11 +760,11 @@ class TextMessage(BaseMessage):
         self.contact = df_row.contact
         self.number = df_row.number
         self.attachment = df_row.attachment
-        self.attchtype = df_row.attchtype
+        self.attachment_type = df_row.attchtype
         try:
-            self.attchfile, self.attchhasthumb = encode_attachment(df_row)
+            self.attachment_file, self.attachment_has_thumbnail = encode_attachment(df_row)
         except TypeError:
-            self.attchfile = None
+            self.attachment_file = None
         self.org = df_row.org
 
 
@@ -952,6 +1038,7 @@ class TextOutput(BaseOutput):
 
     # noinspection PyTypeChecker,PyUnresolvedReferences
     def _get_messages(self):
+
         self.cursor.execute(self._sqlite_query_attach_contact_db())
         self.cursor.execute(self._sqlite_query_get_messages())
 
@@ -962,7 +1049,7 @@ class TextOutput(BaseOutput):
                 "attachment", "attchtype", "attchfile", "body"
             ]
         )
-        logging.debug(unread_df.to_string())
+        logging.debug(f"\n{unread_df.to_string()}\n")
         self.unread_count = len(unread_df.index)
 
         # self.cursor.execute(self._sqlite_query_get_messages_recent())
@@ -1163,7 +1250,7 @@ class RedditOutput(BaseOutput):
                 )
 
                 for unread_message in unread_messages:
-                    # print(vars(message))
+                    logger.debug(f"Unread message vars:\n{vars(unread_message)}\n")
                     unread_df.loc[len(unread_df)] = [
                         unread_message.id,
                         unread_message.parent_id,
@@ -1177,7 +1264,7 @@ class RedditOutput(BaseOutput):
                         unread_message.was_comment,
                         unread_message.context
                     ]
-                logger.debug(unread_df.to_string())
+                logger.debug(f"\n{unread_df.to_string()}\n")
 
                 # display messages in reverse order they were received (newest to oldest, top to bottom)
                 unread_df.sort_values("timestamp", inplace=True, ascending=False)
@@ -1271,6 +1358,11 @@ class TelegramMessage(BaseMessage):
         self.id = str(df_row.id)
         self.cid = str(df_row.cid)
 
+        self.attachment = df_row.attachment
+        self.attachment_type = df_row.attachment_type
+        self.attachment_file = df_row.attachment_file
+        self.attachment_has_thumbnail = df_row.attachment_has_thumbnail
+
         self.context = f"?{df_row.context}" if df_row.context else ""
 
         deep_link_unread_message = sanitize_url(f"tg://openmessage{self.context}")
@@ -1324,7 +1416,8 @@ class TelegramOutput(BaseOutput):
 
             unread_df = pd.DataFrame(
                 columns=[
-                    "id", "cid", "title", "timestamp", "sender", "body", "media", "context"
+                    "id", "cid", "title", "timestamp", "sender", "body", "attachment", "attachment_type",
+                    "attachment_file", "attachment_has_thumbnail", "context"
                 ]
             )
 
@@ -1347,6 +1440,23 @@ class TelegramOutput(BaseOutput):
 
                         sender_name = sender_name.strip()
 
+                        media_exists = 0
+                        media_type = None
+                        media_thumb_str = None
+                        media_has_thumbnail = False
+                        if message.media:
+                            media_bytes = BytesIO()
+                            message.download_media(file=media_bytes)
+
+                            img = Image.open(media_bytes)
+                            # img.show()
+                            output, media_thumb_str, media_has_thumbnail = convert_image_to_bytes(
+                                BytesIO(), img, "JPEG"
+                            )
+
+                            media_exists = 1
+                            media_type = "image/jpeg"
+
                         unread_df.loc[len(unread_df)] = [
                             message.id,
                             dialog.id,
@@ -1354,8 +1464,10 @@ class TelegramOutput(BaseOutput):
                             message.date,
                             sender_name,
                             message.message,
-                            None,
-                            # message.media,
+                            media_exists,
+                            media_type,
+                            media_thumb_str,
+                            media_has_thumbnail,
                             f"user_id={sender.id}&message_id={message.id}"
                         ]
 
@@ -1363,7 +1475,7 @@ class TelegramOutput(BaseOutput):
                         if unread_count == 0:
                             break
 
-            logger.debug(unread_df.to_string())
+            logger.debug(f"\n{unread_df.to_string()}\n")
 
             # display messages in reverse order they were received (newest to oldest, top to bottom)
             unread_df.sort_values("timestamp", inplace=True, ascending=False)
@@ -1447,7 +1559,7 @@ if __name__ == "__main__":
         unread_count += message_account_output.get_unread_count()
 
     standard_output.append("---")
-    standard_output.append(F"Refresh | font=HelveticaNeue-Italic color={HEX_BLUE} refresh=true")
+    standard_output.append(F"Refresh | font={FONT_ITALIC} color={HEX_BLUE} refresh=true")
     standard_output.append("---")
 
     if unread_count > 0:
@@ -1460,4 +1572,4 @@ if __name__ == "__main__":
     for line in standard_output:
         print(line)
 
-    logger.debug(time.process_time() - start)
+    logger.debug(f"Message Notifier completion time: {time.process_time() - start}")
