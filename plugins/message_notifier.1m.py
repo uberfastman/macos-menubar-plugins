@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# to get homebrew and pyenv python working together, see:
+# https://towardsdatascience.com/homebrew-and-pyenv-python-playing-pleasantly-in-partnership-3a342d86319b
+
 # <bitbar.title>Message Notifier</bitbar.title>
 # <bitbar.version>v1.0.0</bitbar.version>
 # <bitbar.author>Wren J. R.</bitbar.author>
 # <bitbar.author.github>uberfastman</bitbar.author.github>
 # <bitbar.desc>Display unread messages from iMessages/SMS, Reddit, and Telegram in the macOS menubar!</bitbar.desc>
-# <bitbar.image>https://github.com/uberfastman/local-bitbar-plugins/raw/develop/plugins/images/menubar-reddit-messages.png</bitbar.image>
-# <bitbar.dependencies>python3,pandas,pillow,praw,prawcore,pymediainfo,pync,python-dateutil,telethon,vobject</bitbar.dependencies>
+# <bitbar.image>https://github.com/uberfastman/macos-menubar-plugins/raw/develop/resources/images/readme_screenshot_1.png</bitbar.image>
+# <bitbar.dependencies>python3,opencv-python,pandas,pillow,praw,prawcore,pymediainfo,pync,python-dateutil,telethon,vobject</bitbar.dependencies>
 # <bitbar.abouturl>https://github.com/uberfastman/macos-menubar-plugins</bitbar.abouturl>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
@@ -71,9 +74,18 @@ logging.getLogger("asyncio").setLevel(logging.WARN)
 MAX_LINE_CHARS = 50
 MAX_GROUP_CHAT_SEARCH_RESULTS = 10  # The higher this number, the longer the app will take to run each time.
 MAX_GROUP_CHAT_PARTICIPANT_DISPLAY = 5
+
 THUMBNAIL_PIXEL_SIZE = 500
-TIMESTAMP_FONT_SIZE = 8
+
+# uses macOS system font: https://developer.apple.com/fonts/
+FONT_FOR_TEXT_PATH = Path("/Library/Fonts/SF-Compact.ttf")
+FONT_FOR_TITLE = "Menlo"
+FONT_ITALIC = "HelveticaNeue-Italic"
+FONT_SIZE_FOR_TITLE = 10
+FONT_SIZE_FOR_TIMESTAMP = 8
+
 LOG_LEVEL = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
+
 SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text"]
 # SUPPORTED_MESSAGE_TYPES = ["reddit"]
@@ -115,8 +127,6 @@ HEX_BLUE = "#7FC3D8"
 
 CSS_TEAL = "teal"
 CSS_GRAY = "gray"
-
-FONT_ITALIC = "HelveticaNeue-Italic"
 
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • MENUBAR PLUGIN BASE CLASSES ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
@@ -337,7 +347,7 @@ def encode_image(image_file_path: Path, unread_count: int = 0) -> str:
     if unread_count > 0:
         unread_count_str = f"{unread_count}"
 
-        font = ImageFont.truetype(str(Path("/Library/Fonts/SF-Compact.ttf")), menubar_icon_font_size)
+        font = ImageFont.truetype(str(FONT_FOR_TEXT_PATH), menubar_icon_font_size)
         ascent, descent = font.getmetrics()
         # offset_y = space above letters
         # ascent - offset_y = height of letters (not counting tails)
@@ -546,9 +556,10 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                             img_format = "JPEG"
 
                     elif mime_type == "image/gif":
-                        pass
+                        # TODO: fix handling of GIFs
                         # img = Image.open(path_str)
                         # img_format = "GIF"
+                        pass
 
                     elif mime_type == "image/png":
                         # pass
@@ -578,8 +589,8 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
 
                 return thumb_str, attachment_has_image_thumbnail
 
-        except IOError:
-            logger.error("Unable to create thumbnail for '%s'" % path_str)
+        except IOError as e:
+            logger.error(f"Unable to create thumbnail for '{path_str}' with error {repr(e)}")
 
 
 # noinspection DuplicatedCode
@@ -650,7 +661,8 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
 
         if conversation.title:
             standard_output.append(
-                f"--{conversation.title}{message_display_str}{conversation.menubar_msg_display_str} font=Menlo size=10"
+                f"--{conversation.title}{message_display_str}{conversation.menubar_msg_display_str} "
+                f"font={FONT_FOR_TITLE} size={FONT_SIZE_FOR_TITLE}"
             )
 
         standard_output.append(
@@ -663,7 +675,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
             timestamp_display_str = (
                 f"--{ANSI_CYAN}{message.timestamp_str}"
                 f"{ANSI_GREEN}{message_display_str}{message.menubar_msg_display_str} "
-                f"size={str(TIMESTAMP_FONT_SIZE)}"
+                f"size={FONT_SIZE_FOR_TIMESTAMP}"
             )
             msg_sender_start_str = f"--{ANSI_RED}({message.sender}) {ANSI_GREEN}"
             msg_format_str = f"--{ANSI_GREEN}"
@@ -770,6 +782,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
 
     if not message_ids.issubset(processed_messages):
         message_ids_series = pd.Series(list(message_ids))
+        # noinspection PyTypeChecker
         message_ids_series.to_csv(
             data_dir / f"{message_type}_{username.lower()}_messages_processed.csv", header=["uuid"]
         )
