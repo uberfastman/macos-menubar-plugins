@@ -32,7 +32,7 @@ from importlib import util
 from io import BytesIO
 from pathlib import Path
 from subprocess import call, run, DEVNULL, PIPE, STDOUT
-from typing import Dict, Set, List, Union
+from typing import Dict, Set, List, Tuple, Union
 from urllib import parse
 from uuid import UUID
 
@@ -85,6 +85,9 @@ SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 # noinspection DuplicatedCode
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=LOG_LEVEL)
+
+# Unicode character "⠀" (U+2800) for blank lines
+BLANK_CHAR = "⠀"
 
 # reference: https://chrisyeh96.github.io/2020/03/28/terminal-colors.html
 ANSI_BLACK = "\u001b[30m"
@@ -145,8 +148,8 @@ class BaseMessage(object):
         self.id = df_row.id
         self.cid = df_row.cid
         self.title = df_row.title
-        self.raw_timestamp = df_row.timestamp
-        self.timestamp = df_row.timestamp
+        self.timestamp = convert_timestamp(df_row.timestamp)
+        self.timestamp_str = format_timestamp(df_row.timestamp)
         self.sender = df_row.sender
         self.body = df_row.body.replace('\n', ' ').replace('\r', '').strip()
         self.body_short = f"{self.body[:max_line_characters]}..."
@@ -154,8 +157,9 @@ class BaseMessage(object):
         self.attachment = 0
         self.menubar_msg_display_str = menubar_msg_display_str
 
-    def get_message_len(self):
-        return len(self.body.encode("ascii", "ignore"))
+    def get_message_len(self) -> int:
+        # return len(self.body.encode("ascii", "ignore"))
+        return len(self.body.replace(BLANK_CHAR, ""))
 
     def __repr__(self):
         return str(vars(self))
@@ -167,16 +171,22 @@ class BaseMessage(object):
 # noinspection DuplicatedCode
 class BaseConversation(object):
 
-    def __init__(self, message_obj):
+    def __init__(self, message_obj: BaseMessage):
         self.id = message_obj.cid
         self.title = f"{ANSI_OFF}{message_obj.title}{ANSI_YELLOW}" if message_obj.title else ""
+        self.most_recent_timestamp = message_obj.timestamp
         self.messages = [message_obj]
         self.participants = {message_obj.sender}
         self.is_group_conversation = False
         self.menubar_msg_display_str = message_obj.menubar_msg_display_str
 
-    def add_message(self, message_obj):
+    def add_message(self, message_obj) -> None:
         if message_obj.cid == self.id:
+            self.most_recent_timestamp = (
+                message_obj.timestamp
+                if message_obj.timestamp > self.most_recent_timestamp
+                else self.most_recent_timestamp
+            )
             self.messages.append(message_obj)
             self.participants.add(message_obj.sender)
             if len(self.participants) > 1:
@@ -186,10 +196,10 @@ class BaseConversation(object):
         else:
             raise ValueError("Cannot add Message with mismatching id to Conversation!")
 
-    def get_message_count(self):
+    def get_message_count(self) -> int:
         return len(self.messages)
 
-    def get_participants_str(self):
+    def get_participants_str(self) -> str:
         if self.is_group_conversation:
             return (
                 f"{', '.join(participant for participant in self.participants)}"
@@ -198,8 +208,8 @@ class BaseConversation(object):
         else:
             return "".join(participant for participant in self.participants)
 
-    def sort_messages(self, descending=True):
-        self.messages.sort(key=lambda x: x.raw_timestamp, reverse=descending)
+    def sort_messages(self, descending: bool = True) -> None:
+        self.messages.sort(key=lambda x: x.timestamp, reverse=descending)
 
     def __repr__(self):
         return str(vars(self))
@@ -234,13 +244,32 @@ class BaseOutput(ABC):
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 
 
+def convert_timestamp(timestamp: Union[str, float, datetime]) -> datetime:
+    # iMessage/SMS message timestamp: datetime string
+    # Reddit message timestamp: floating point UTC epoch
+    # Telegram message timestamp: pandas datetime
+
+    if isinstance(timestamp, float):
+        timestamp = datetime.utcfromtimestamp(timestamp).strftime("%m-%d-%Y %H:%M:%S")
+
+    if isinstance(timestamp, float) or isinstance(timestamp, datetime):
+        utc_time_zone = tz.tzutc()
+        local_time_zone = tz.tzlocal()
+        timestamp = timestamp.replace(tzinfo=utc_time_zone)
+        timestamp = timestamp.astimezone(local_time_zone)
+        timestamp = timestamp.strftime("%m-%d-%Y %H:%M:%S")
+
+    timestamp = datetime.strptime(str(timestamp), "%m-%d-%Y %H:%M:%S")
+
+    return timestamp
+
+
 # noinspection DuplicatedCode
-def format_timestamp(timestamp: Union[str, datetime]):
-    if type(timestamp) == str:
-        message_timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
-    else:
-        message_timestamp = timestamp
-    message_timestamp_str = message_timestamp.strftime("%m-%d-%Y %I:%M:%S %p").lower()
+def format_timestamp(timestamp: Union[str, float, datetime]) -> str:
+    message_timestamp = convert_timestamp(timestamp)
+    # reference for strftime formatting: https://strftime.org
+    # message_timestamp_str = message_timestamp.strftime("%m-%d-%Y %I:%M:%S %p").lower()
+    message_timestamp_str = message_timestamp.strftime("%b %-d, %Y - %-I:%M:%S %p").lower().capitalize()
 
     today = datetime.today()
     if today.date() == message_timestamp.date():
@@ -274,7 +303,7 @@ def format_timestamp(timestamp: Union[str, datetime]):
         return f"{message_timestamp_str} ({weekday_str} - {day_delta} day{'s' if day_delta > 1 else ''} ago)"
 
 
-def sanitize_url(url_str: str):
+def sanitize_url(url_str: str) -> str:
     url = parse.urlsplit(url_str)
     url = list(url)
     url[2] = parse.quote(url[2])
@@ -282,7 +311,7 @@ def sanitize_url(url_str: str):
 
 
 # noinspection PyShadowingNames
-def encode_image(image_file_path: Path, unread_count: int = 0):
+def encode_image(image_file_path: Path, unread_count: int = 0) -> str:
     image_bytes = BytesIO()
     img = Image.open(image_file_path)
 
@@ -341,7 +370,8 @@ def encode_image(image_file_path: Path, unread_count: int = 0):
 
 
 def convert_image_to_bytes(output: BytesIO, image: Image, image_format: str, max_size: int = THUMBNAIL_PIXEL_SIZE,
-                           optimize: bool = False, quality: int = 100, conversion_attempts: int = 1):
+                           optimize: bool = False, quality: int = 100,
+                           conversion_attempts: int = 1) -> Tuple[BytesIO, str, bool]:
 
     image.thumbnail((max_size, max_size), Image.ANTIALIAS)
     image_format = image_format.upper()
@@ -387,7 +417,7 @@ def convert_image_to_bytes(output: BytesIO, image: Image, image_format: str, max
 
 
 # noinspection DuplicatedCode
-def encode_attachment(message_row):
+def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
     path_str = message_row.attchfile
     mime_type = message_row.attchtype
     attachment_has_image_thumbnail = False
@@ -405,13 +435,18 @@ def encode_attachment(message_row):
                     while vcard is not None:
                         thumb_str.append(f"{vcard.name}")
                         for vcard_component in vcard.getChildren():
-                            thumb_str.append(f"    {vcard_component.name}: {vcard_component.valueRepr()}")
+                            component_name = vcard_component.name
+                            component_value_list = str(vcard_component.valueRepr()).split("\n")
+
+                            thumb_str.append(f"    {component_name}: {component_value_list[0]}")
+                            for component_value in component_value_list[1:]:
+                                thumb_str.append(f"    {' ' * len(component_name)}  {component_value}")
                             if vcard_component.params:
-                                thumb_str.append(f"    params for {vcard_component.name}:")
+                                thumb_str.append(f"    params for {component_name}:")
                                 for k in vcard_component.params.keys():
                                     thumb_str.append(f"        {k}: {vcard_component.params[k]}")
 
-                        thumb_str.append('⠀')  # Unicode character '⠀' (U+2800) for blank lines
+                        thumb_str.append(BLANK_CHAR)
                         vcard = next(vcard_objects, None)
 
                     thumb_str.pop()
@@ -548,7 +583,7 @@ def encode_attachment(message_row):
 
 
 # noinspection DuplicatedCode
-def send_macos_notification(unread, message_senders, title, arguments):
+def send_macos_notification(unread: int, message_senders: Set[str], title: str, arguments) -> None:
     notification_group_id = "notifier"
 
     Notifier.notify(
@@ -564,7 +599,7 @@ def send_macos_notification(unread, message_senders, title, arguments):
 
 
 # noinspection PyShadowingNames,PyListCreation
-def generate_output_read(local_dir: Path, message_type: str, display_string: str, user: str):
+def generate_output_read(local_dir: Path, message_type: str, display_string: str, user: str) -> List[str]:
     standard_output = []
     standard_output.append("---")
     standard_output.append(
@@ -587,7 +622,7 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
 # noinspection PyUnresolvedReferences,PyShadowingNames,PyListCreation,DuplicatedCode
 def generate_output_unread(local_dir: Path, message_type: str, display_string: str, unread: int,
                            conversations: Dict[str, BaseConversation], max_line_characters: int, arguments: Dict,
-                           username: str, user: str = None, all_unread_message_senders: Set = None):
+                           username: str, user: str = None, all_unread_message_senders: Set = None) -> List[str]:
     standard_output = []
     standard_output.append("---")
     standard_output.append(
@@ -602,10 +637,15 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
         f"| ansi=true {display_string}"
     )
 
+    ordered_conversations = OrderedDict(
+        [(conversation.id, conversation) for conversation in sorted(
+            conversations.values(), key=lambda x: x.most_recent_timestamp, reverse=True)]
+    )
+
     message_ids = set()
     message_senders = set()
     message_num = 1
-    for cid, conversation in conversations.items():
+    for cid, conversation in ordered_conversations.items():
         message_display_str = f"{ANSI_OFF} | ansi=true refresh=true "
 
         if conversation.title:
@@ -621,7 +661,8 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
         for message in conversation.messages:  # type: BaseMessage
 
             timestamp_display_str = (
-                f"--{ANSI_CYAN}{message.timestamp}{ANSI_GREEN}{message_display_str}{message.menubar_msg_display_str} "
+                f"--{ANSI_CYAN}{message.timestamp_str}"
+                f"{ANSI_GREEN}{message_display_str}{message.menubar_msg_display_str} "
                 f"size={str(TIMESTAMP_FONT_SIZE)}"
             )
             msg_sender_start_str = f"--{ANSI_RED}({message.sender}) {ANSI_GREEN}"
@@ -700,7 +741,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                     )
 
             if conversation.messages.index(message) != (len(conversation.messages) - 1):
-                standard_output.append(f"--{'⠀'} | size=2")  # Unicode character '⠀' (U+2800) for blank lines
+                standard_output.append(f"--{BLANK_CHAR} | size=2")
 
             message_ids.add(str(message.id).lower())
             message_senders.add(message.sender)
@@ -751,7 +792,6 @@ class TextMessage(BaseMessage):
     def __init__(self, df_row, max_line_characters, menubar_msg_display_str):
         super().__init__(df_row, max_line_characters, menubar_msg_display_str)
 
-        self.timestamp = format_timestamp(df_row.timestamp)
         self.sender = df_row.sender if df_row.sender else (df_row.org if df_row.org else df_row.contact)
 
         self.rowid = df_row.rowid
@@ -804,7 +844,7 @@ class TextOutput(BaseOutput):
         self.conversations = OrderedDict()
         self.unread_count = 0
 
-    def _directory_size(self, directory_path: Path, total_size: int = 0):
+    def _directory_size(self, directory_path: Path, total_size: int = 0) -> int:
         for child_path in directory_path.rglob("*"):
             if child_path.is_file():
                 total_size += child_path.stat().st_size
@@ -813,7 +853,7 @@ class TextOutput(BaseOutput):
 
         return total_size
 
-    def _sqlite_query_attach_contact_db(self):
+    def _sqlite_query_attach_contact_db(self) -> str:
 
         contact_directory_root = Path(f"/Users/{self.macos_username}/Library/Application Support/AddressBook/Sources/")
 
@@ -837,7 +877,7 @@ class TextOutput(BaseOutput):
 
     # noinspection SqlResolve
     @staticmethod
-    def _sqlite_query_get_messages():
+    def _sqlite_query_get_messages() -> str:
         return """
             SELECT 
                 msg.guid as id, 
@@ -904,7 +944,7 @@ class TextOutput(BaseOutput):
 
     # noinspection SqlResolve
     @staticmethod
-    def _sqlite_query_get_messages_recent():
+    def _sqlite_query_get_messages_recent() -> str:
         return """
             SELECT 
                 msg.guid as id, 
@@ -972,7 +1012,7 @@ class TextOutput(BaseOutput):
 
     # noinspection SqlResolve
     @staticmethod
-    def _sqlite_query_get_messages_group_chat():
+    def _sqlite_query_get_messages_group_chat() -> str:
         return """
             SELECT 
                 cht.chat_identifier as cid, 
@@ -1025,7 +1065,7 @@ class TextOutput(BaseOutput):
         """
 
     @staticmethod
-    def _get_macos_full_name(macos_username):
+    def _get_macos_full_name(macos_username: str) -> str:
 
         output = run(["id", "-F", f"{macos_username}"], stdout=PIPE, stderr=PIPE, universal_newlines=True)
         exit_code = output.returncode
@@ -1037,7 +1077,7 @@ class TextOutput(BaseOutput):
             return macos_username
 
     # noinspection PyTypeChecker,PyUnresolvedReferences
-    def _get_messages(self):
+    def _get_messages(self) -> None:
 
         self.cursor.execute(self._sqlite_query_attach_contact_db())
         self.cursor.execute(self._sqlite_query_get_messages())
@@ -1063,7 +1103,7 @@ class TextOutput(BaseOutput):
         # recent_df = recent_df[["rowid", "cid"]]
 
         # display messages in reverse order they were received (newest to oldest, top to bottom)
-        unread_df.sort_values("timestamp", inplace=True, ascending=False)
+        # unread_df.sort_values("timestamp", inplace=True, ascending=False)
 
         for row in unread_df.itertuples():
 
@@ -1098,7 +1138,7 @@ class TextOutput(BaseOutput):
         for conversation in self.conversations.values():  # type: TextConversation
             conversation.sort_messages(descending=False)
 
-    def get_console_output(self):
+    def get_console_output(self) -> List[str]:
 
         self._get_messages()
 
@@ -1153,17 +1193,6 @@ class RedditMessage(BaseMessage):
     def __init__(self, df_row, max_line_characters, display_string):
         super().__init__(df_row, max_line_characters, display_string)
 
-        self.raw_timestamp = datetime.utcfromtimestamp(df_row.timestamp)
-
-        timestamp = datetime.utcfromtimestamp(df_row.timestamp).strftime("%m-%d-%Y %H:%M:%S")
-        utc_time_zone = tz.tzutc()
-        local_time_zone = tz.tzlocal()
-        timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
-        timestamp = timestamp.replace(tzinfo=utc_time_zone)
-        timestamp = timestamp.astimezone(local_time_zone)
-        timestamp = timestamp.strftime("%m-%d-%Y %H:%M:%S")
-        self.timestamp = format_timestamp(str(timestamp))
-
         self.recipient = df_row.recipient
         self.subreddit = df_row.subreddit
         self.comment = bool(df_row.comment)
@@ -1189,7 +1218,7 @@ class RedditConversation(BaseConversation):
         else:
             self.type_str = f"{ANSI_RED} (message){ANSI_OFF}"
 
-    def get_participants_str(self):
+    def get_participants_str(self) -> str:
         if self.is_group_conversation:
             return (
                 f"{', '.join(participant for participant in self.participants)}"
@@ -1221,7 +1250,7 @@ class RedditOutput(BaseOutput):
 
         self.standard_error = []
 
-    def _get_messages(self):
+    def _get_messages(self) -> None:
 
         for reddit_account_credentials in self.reddit_account_credentials_list:
 
@@ -1267,7 +1296,7 @@ class RedditOutput(BaseOutput):
                 logger.debug(f"\n{unread_df.to_string()}\n")
 
                 # display messages in reverse order they were received (newest to oldest, top to bottom)
-                unread_df.sort_values("timestamp", inplace=True, ascending=False)
+                # unread_df.sort_values("timestamp", inplace=True, ascending=False)
 
                 conversations = OrderedDict()
                 for row in unread_df.itertuples():
@@ -1288,7 +1317,7 @@ class RedditOutput(BaseOutput):
                     f"--{ANSI_RED}UNABLE TO RETRIEVE REDDIT ACCOUNT CONTENT WITH ERROR: {repr(e)}! | ansi=true"
                 ])
 
-    def get_console_output(self):
+    def get_console_output(self) -> List[str]:
 
         self._get_messages()
 
@@ -1344,17 +1373,6 @@ class TelegramMessage(BaseMessage):
     def __init__(self, df_row, max_line_characters, display_string):
         super().__init__(df_row, max_line_characters, display_string)
 
-        self.raw_timestamp = df_row.timestamp
-
-        timestamp = df_row.timestamp.strftime("%m-%d-%Y %H:%M:%S")
-        utc_time_zone = tz.tzutc()
-        local_time_zone = tz.tzlocal()
-        timestamp = datetime.strptime(timestamp, "%m-%d-%Y %H:%M:%S")
-        timestamp = timestamp.replace(tzinfo=utc_time_zone)
-        timestamp = timestamp.astimezone(local_time_zone)
-        timestamp = timestamp.strftime("%m-%d-%Y %H:%M:%S")
-        self.timestamp = format_timestamp(str(timestamp))
-
         self.id = str(df_row.id)
         self.cid = str(df_row.cid)
 
@@ -1374,7 +1392,7 @@ class TelegramConversation(BaseConversation):
     def __init__(self, telegram_message_obj):
         super().__init__(telegram_message_obj)
 
-    def get_participants_str(self):
+    def get_participants_str(self) -> str:
         if self.is_group_conversation:
             if len(self.participants) > MAX_GROUP_CHAT_PARTICIPANT_DISPLAY:
                 participants = ', '.join(
@@ -1404,7 +1422,7 @@ class TelegramOutput(BaseOutput):
         telegram_deep_link = "tg://"
         self.unread_display_str = f"href={telegram_deep_link} tooltip={telegram_deep_link} "
 
-    def _get_messages(self):
+    def _get_messages(self) -> None:
 
         with TelegramClient(
                 StringSession(self.credentials.get("session_string")),
@@ -1478,7 +1496,7 @@ class TelegramOutput(BaseOutput):
             logger.debug(f"\n{unread_df.to_string()}\n")
 
             # display messages in reverse order they were received (newest to oldest, top to bottom)
-            unread_df.sort_values("timestamp", inplace=True, ascending=False)
+            # unread_df.sort_values("timestamp", inplace=True, ascending=False)
 
             for row in unread_df.itertuples():
 
@@ -1492,7 +1510,7 @@ class TelegramOutput(BaseOutput):
             for conversation in self.conversations.values():  # type: TelegramConversation
                 conversation.sort_messages(descending=False)
 
-    def get_console_output(self):
+    def get_console_output(self) -> List[str]:
 
         self._get_messages()
 
