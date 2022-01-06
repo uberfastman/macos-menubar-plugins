@@ -9,7 +9,7 @@
 # <bitbar.author>Wren J. R.</bitbar.author>
 # <bitbar.author.github>uberfastman</bitbar.author.github>
 # <bitbar.desc>Display unread messages from iMessages/SMS, Reddit, and Telegram in the macOS menubar!</bitbar.desc>
-# <bitbar.image>https://github.com/uberfastman/macos-menubar-plugins/raw/develop/resources/images/readme_screenshot_1.png</bitbar.image>
+# <bitbar.image>https://github.com/uberfastman/macos-menubar-plugins/raw/develop/resources/images/message_notifier_icon.png</bitbar.image>
 # <bitbar.dependencies>python3,opencv-python,pandas,pillow,praw,prawcore,pymediainfo,pync,python-dateutil,telethon,vobject</bitbar.dependencies>
 # <bitbar.abouturl>https://github.com/uberfastman/macos-menubar-plugins</bitbar.abouturl>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
