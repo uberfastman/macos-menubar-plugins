@@ -1,4 +1,4 @@
-#!/Users/wrenjr/.pyenv/versions/3.10.0/bin/python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # <bitbar.title>Message Notifier</bitbar.title>
