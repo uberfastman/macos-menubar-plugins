@@ -34,6 +34,7 @@ from datetime import datetime
 from importlib import util
 from io import BytesIO
 from pathlib import Path
+from random import Random
 from subprocess import call, run, DEVNULL, PIPE, STDOUT
 from typing import Dict, Set, List, Tuple, Union
 from urllib import parse
@@ -85,6 +86,8 @@ FONT_SIZE_FOR_TITLE = 10
 FONT_SIZE_FOR_TIMESTAMP = 8
 
 LOG_LEVEL = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
+
+PERSISTENT_DATA_COLUMNS = ["id", "type", "timestamp", "username", "sender"]
 
 SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text"]
@@ -252,6 +255,12 @@ class BaseOutput(ABC):
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • MENUBAR PLUGIN BASE FUNCTIONS • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
+
+
+def create_deterministic_uuid(seed: str) -> str:
+    random_num_gen_with_seed = Random()
+    random_num_gen_with_seed.seed(seed)
+    return str(UUID(int=random_num_gen_with_seed.getrandbits(128), version=4))
 
 
 def convert_timestamp(timestamp: Union[str, float, datetime]) -> datetime:
@@ -610,11 +619,15 @@ def send_macos_notification(unread: int, message_senders: Set[str], title: str, 
 
 
 # noinspection PyShadowingNames,PyListCreation
-def generate_output_read(local_dir: Path, message_type: str, display_string: str, user: str) -> List[str]:
+def generate_output_read(local_dir: Path, message_type: str, display_string: str, username: str,
+                         user: str = None) -> List[str]:
+
+    recipient = user if user else username
+
     standard_output = []
     standard_output.append("---")
     standard_output.append(
-        f"No unread {message_type.capitalize()} messages for {user}! (Go to messages ↗︎️) "
+        f"No unread {message_type.capitalize()} messages for {recipient}! (Go to messages ↗︎️) "
         f"| color={CSS_TEAL} {display_string}"
     )
 
@@ -623,9 +636,13 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
     if not data_dir.is_dir():
         os.makedirs(data_dir)
 
-    # open processed messages file using w+ mode to truncate the contents (clear all processed message UUIDs)
-    file = open(data_dir / f"{message_type}_{user.lower()}_messages_processed.csv", "w+")
-    file.close()
+    # clear all processed message UUIDs once messages are read
+    all_processed_messages_df = pd.read_csv(data_dir / "processed_messages.csv", index_col=0)
+    all_other_processed_messages_df = all_processed_messages_df.loc[
+        (all_processed_messages_df["type"] != message_type)
+        | (all_processed_messages_df["username"] != username)
+    ]
+    all_other_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
 
     return standard_output
 
@@ -634,17 +651,20 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
 def generate_output_unread(local_dir: Path, message_type: str, display_string: str, unread: int,
                            conversations: Dict[str, BaseConversation], max_line_characters: int, arguments: Dict,
                            username: str, user: str = None, all_unread_message_senders: Set = None) -> List[str]:
+
+    recipient = user if user else username
+
     standard_output = []
     standard_output.append("---")
     standard_output.append(
-        f"Go to {message_type.capitalize()} messages for {user if user else username} ↗︎️ "
+        f"Go to {message_type.capitalize()} messages for {recipient} ↗︎️ "
         f"| font={FONT_ITALIC} color={HEX_ORANGE} {display_string}"
     )
 
     unread_message_count = sum([conv.get_message_count() for conv in conversations.values()])
     standard_output.append(
         f"{ANSI_GREEN}Unread {message_type.capitalize()} messages for "
-        f"{user if user else username}: {ANSI_RED}{unread_message_count}{ANSI_OFF} "
+        f"{recipient}: {ANSI_RED}{unread_message_count}{ANSI_OFF} "
         f"| ansi=true {display_string}"
     )
 
@@ -653,8 +673,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
             conversations.values(), key=lambda x: x.most_recent_timestamp, reverse=True)]
     )
 
-    message_ids = set()
-    message_senders = set()
+    unread_messages = {}
     message_num = 1
     for cid, conversation in ordered_conversations.items():
         message_display_str = f"{ANSI_OFF} | ansi=true refresh=true "
@@ -755,8 +774,9 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
             if conversation.messages.index(message) != (len(conversation.messages) - 1):
                 standard_output.append(f"--{BLANK_CHAR} | size=2")
 
-            message_ids.add(str(message.id).lower())
-            message_senders.add(message.sender)
+            message_id = str(message.id).lower()
+            message_uuid = create_deterministic_uuid(message_id)
+            unread_messages[message_uuid] = [message_id, message_type, message.timestamp, username, message.sender]
 
         standard_output.append("-----")
         message_num += 1
@@ -766,30 +786,35 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
     if not data_dir.is_dir():
         os.makedirs(data_dir)
 
-    processed_messages = set()
+    processed_message_ids = set()
+    processed_message_senders = set()
+    all_processed_messages_df = pd.DataFrame(columns=PERSISTENT_DATA_COLUMNS)
     try:
-        uuids = pd.read_csv(data_dir / f"{message_type}_{username.lower()}_messages_processed.csv")["uuid"].tolist()
-        processed_messages = set([str(message_id).lower() for message_id in uuids])
+        all_processed_messages_df = pd.read_csv(data_dir / "processed_messages.csv", index_col=0)
+        processed_messages_df = all_processed_messages_df[all_processed_messages_df["type"] == message_type]
+        uuids = processed_messages_df.index.tolist()
+        processed_message_ids = set([str(message_id).lower() for message_id in uuids])
+        processed_message_senders = set(processed_messages_df["sender"].to_list())
+
     except FileNotFoundError:
-        logger.debug(
-            f"File {message_type}_{username.lower()}_messages_processed.csv does not exist, and will be created."
-        )
+        logger.debug("File processed_messages.csv does not exist, and will be created.")
     except EmptyDataError:
-        logger.debug(
-            f"File {message_type}_{username.lower()}_messages_processed.csv is empty, and will be populated with any "
-            f"current unread message UUIDs."
-        )
+        logger.debug("File processed_messages.csv is empty, and will be populated.")
 
-    if not message_ids.issubset(processed_messages):
-        message_ids_series = pd.Series(list(message_ids))
-        # noinspection PyTypeChecker
-        message_ids_series.to_csv(
-            data_dir / f"{message_type}_{username.lower()}_messages_processed.csv", header=["uuid"]
-        )
+    # if not message_ids.issubset(processed_messages):
+    if not set(unread_messages.keys()).issubset(processed_message_ids):
 
-        # send_macos_notification(unread, message_senders, "Messages", arguments)
+        unread_messages_df = pd.DataFrame.from_dict(unread_messages, orient="index", columns=PERSISTENT_DATA_COLUMNS)
+        all_processed_messages_df = all_processed_messages_df.append(unread_messages_df)
+        all_processed_messages_df.drop_duplicates(inplace=True)
+        all_processed_messages_df.rename_axis("uuid", inplace=True)
+        all_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
+
         send_macos_notification(
-            unread, all_unread_message_senders if all_unread_message_senders else message_senders, "Messages", arguments
+            unread,
+            all_unread_message_senders if all_unread_message_senders else processed_message_senders,
+            "Messages",
+            arguments
         )
 
     return standard_output
@@ -1168,7 +1193,8 @@ class TextOutput(BaseOutput):
                     self.project_root_dir,
                     self.message_type,
                     display_str,
-                    self.macos_full_name
+                    self.macos_username,
+                    user=self.macos_full_name
                 )
             )
 

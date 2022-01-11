@@ -1,17 +1,18 @@
+# macOS
 .DS_Store
+
+# JetBrains
 .idea/
+
+# Python
 *.pyc
 
-node_modules/
-slack-notifier/
-venv
-
+# credentials
 private*.json
-token*.js
-*_messages_processed.csv
 
-.1_telegram-notifier.1m.py
-.4_slack-notifier.1m.py
-slack-notifier.1m.js
-slack/
-*.scpt
+# persistent data
+*.csv
+
+# testing
+test/
+
