@@ -164,7 +164,7 @@ class BaseMessage(object):
         self.timestamp = convert_timestamp(df_row.timestamp)
         self.timestamp_str = format_timestamp(df_row.timestamp)
         self.sender = df_row.sender
-        self.body = df_row.body.replace('\n', ' ').replace('\r', '').strip()
+        self.body = df_row.body.replace('\n', ' ').replace('\r', '').strip() if df_row.body else ""
         self.body_short = f"{self.body[:max_line_characters]}..."
         self.body_wrapped = textwrap.wrap(self.body, max_line_characters + 1, break_long_words=False)
         self.attachment = 0
