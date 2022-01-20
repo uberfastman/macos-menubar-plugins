@@ -90,6 +90,9 @@ LOG_LEVEL = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging
 PERSISTENT_DATA_COLUMNS = ["id", "type", "timestamp", "username", "sender"]
 
 SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
+# SUPPORTED_MESSAGE_TYPES = ["text", "reddit"]
+# SUPPORTED_MESSAGE_TYPES = ["text", "telegram"]
+# SUPPORTED_MESSAGE_TYPES = ["reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text"]
 # SUPPORTED_MESSAGE_TYPES = ["reddit"]
 # SUPPORTED_MESSAGE_TYPES = ["telegram"]
@@ -808,6 +811,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
         all_processed_messages_df = all_processed_messages_df.append(unread_messages_df)
         all_processed_messages_df.drop_duplicates(inplace=True)
         all_processed_messages_df.rename_axis("uuid", inplace=True)
+        # noinspection PyTypeChecker
         all_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
 
         send_macos_notification(
