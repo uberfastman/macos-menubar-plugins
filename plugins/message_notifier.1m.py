@@ -30,7 +30,7 @@ import textwrap
 import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib import util
 from io import BytesIO
 from pathlib import Path
@@ -48,7 +48,7 @@ from PIL import Image, ExifTags, ImageFilter, ImageDraw, ImageFont
 from cv2 import VideoCapture, imencode
 from dateutil import tz
 from pandas.errors import EmptyDataError
-from prawcore.exceptions import ResponseException, RequestException
+from prawcore.exceptions import ResponseException, RequestException, Forbidden
 from pymediainfo import MediaInfo
 from pync import Notifier
 from telethon.sessions import StringSession
@@ -86,6 +86,7 @@ FONT_SIZE_FOR_TITLE = 10
 FONT_SIZE_FOR_TIMESTAMP = 8
 
 LOG_LEVEL = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
+# LOG_LEVEL = logging.DEBUG
 
 PERSISTENT_DATA_COLUMNS = ["id", "type", "timestamp", "username", "sender"]
 
@@ -133,6 +134,7 @@ HEX_BLUE = "#7FC3D8"
 
 CSS_TEAL = "teal"
 CSS_GRAY = "gray"
+
 
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
 # ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • MENUBAR PLUGIN BASE CLASSES ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~ • ~
@@ -196,7 +198,7 @@ class BaseConversation(object):
         self.is_group_conversation = False
         self.menubar_msg_display_str = message_obj.menubar_msg_display_str
 
-    def add_message(self, message_obj) -> None:
+    def add_message(self, message_obj: BaseMessage, sort_after_add: bool = True) -> None:
         if message_obj.cid == self.id:
             self.most_recent_timestamp = (
                 message_obj.timestamp
@@ -209,6 +211,9 @@ class BaseConversation(object):
                 self.is_group_conversation = True
                 if not self.title:
                     self.title = f"{ANSI_OFF}Group Message{ANSI_YELLOW}"
+
+            if sort_after_add:
+                self.sort_messages()
         else:
             raise ValueError("Cannot add Message with mismatching id to Conversation!")
 
@@ -224,7 +229,7 @@ class BaseConversation(object):
         else:
             return "".join(participant for participant in self.participants)
 
-    def sort_messages(self, descending: bool = True) -> None:
+    def sort_messages(self, descending: bool = False) -> None:
         self.messages.sort(key=lambda x: x.timestamp, reverse=descending)
 
     def __repr__(self):
@@ -271,19 +276,18 @@ def convert_timestamp(timestamp: Union[str, float, datetime]) -> datetime:
     # Reddit message timestamp: floating point UTC epoch
     # Telegram message timestamp: pandas datetime
 
-    if isinstance(timestamp, float):
-        timestamp = datetime.utcfromtimestamp(timestamp).strftime("%m-%d-%Y %H:%M:%S")
-
     if isinstance(timestamp, float) or isinstance(timestamp, datetime):
+
+        if isinstance(timestamp, float):
+            timestamp = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
         utc_time_zone = tz.tzutc()
         local_time_zone = tz.tzlocal()
         timestamp = timestamp.replace(tzinfo=utc_time_zone)
         timestamp = timestamp.astimezone(local_time_zone)
         timestamp = timestamp.strftime("%m-%d-%Y %H:%M:%S")
 
-    timestamp = datetime.strptime(str(timestamp), "%m-%d-%Y %H:%M:%S")
-
-    return timestamp
+    return datetime.strptime(str(timestamp), "%m-%d-%Y %H:%M:%S")
 
 
 # noinspection DuplicatedCode
@@ -394,7 +398,6 @@ def encode_image(image_file_path: Path, unread_count: int = 0) -> str:
 def convert_image_to_bytes(output: BytesIO, image: Image, image_format: str, max_size: int = THUMBNAIL_PIXEL_SIZE,
                            optimize: bool = False, quality: int = 100,
                            conversion_attempts: int = 1) -> Tuple[BytesIO, str, bool]:
-
     image.thumbnail((max_size, max_size), Image.ANTIALIAS)
     image_format = image_format.upper()
 
@@ -624,7 +627,6 @@ def send_macos_notification(unread: int, message_senders: Set[str], title: str, 
 # noinspection PyShadowingNames,PyListCreation
 def generate_output_read(local_dir: Path, message_type: str, display_string: str, username: str,
                          user: str = None) -> List[str]:
-
     recipient = user if user else username
 
     standard_output = []
@@ -644,7 +646,7 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
     all_other_processed_messages_df = all_processed_messages_df.loc[
         (all_processed_messages_df["type"] != message_type)
         | (all_processed_messages_df["username"] != username)
-    ]
+        ]
     all_other_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
 
     return standard_output
@@ -654,7 +656,6 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
 def generate_output_unread(local_dir: Path, message_type: str, display_string: str, unread: int,
                            conversations: Dict[str, BaseConversation], max_line_characters: int, arguments: Dict,
                            username: str, user: str = None, all_unread_message_senders: Set = None) -> List[str]:
-
     recipient = user if user else username
 
     standard_output = []
@@ -806,7 +807,6 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
 
     # if not message_ids.issubset(processed_messages):
     if not set(unread_messages.keys()).issubset(processed_message_ids):
-
         unread_messages_df = pd.DataFrame.from_dict(unread_messages, orient="index", columns=PERSISTENT_DATA_COLUMNS)
         all_processed_messages_df = all_processed_messages_df.append(unread_messages_df)
         all_processed_messages_df.drop_duplicates(inplace=True)
@@ -1177,9 +1177,6 @@ class TextOutput(BaseOutput):
             else:
                 self.conversations.get(text_message.cid).add_message(text_message)
 
-        for conversation in self.conversations.values():  # type: TextConversation
-            conversation.sort_messages(descending=False)
-
     def get_console_output(self) -> List[str]:
 
         self._get_messages()
@@ -1238,9 +1235,10 @@ class RedditMessage(BaseMessage):
 
         self.recipient = df_row.recipient
         self.subreddit = df_row.subreddit
-        self.comment = bool(df_row.comment)
+        self.is_comment = bool(df_row.comment)
+        self.is_modmail = bool(df_row.modmail)
 
-        if self.comment:
+        if self.is_comment:
             self.cid = self.id
 
         if df_row.context:
@@ -1254,10 +1252,12 @@ class RedditMessage(BaseMessage):
 
 class RedditConversation(BaseConversation):
 
-    def __init__(self, reddit_message_obj):
+    def __init__(self, reddit_message_obj: RedditMessage):
         super().__init__(reddit_message_obj)
-        if reddit_message_obj.comment:
-            self.type_str = f"{ANSI_RED} (comment){ANSI_OFF}"
+        if reddit_message_obj.is_modmail:
+            self.type_str = f"{ANSI_BLUE} (modmail for /r/{reddit_message_obj.subreddit}){ANSI_OFF}"
+        elif reddit_message_obj.is_comment:
+            self.type_str = f"{ANSI_MAGENTA} (comment){ANSI_OFF}"
         else:
             self.type_str = f"{ANSI_RED} (message){ANSI_OFF}"
 
@@ -1291,6 +1291,13 @@ class RedditOutput(BaseOutput):
         self.unread_display_str = f"href={link_unread} tooltip={link_unread} "
         self.all_unread_message_senders = set()
 
+        # https://gist.github.com/leviroth/dafcf1331737e2b55dd6fb86257dcb8d
+        self.modmail_conversation_states = {
+            "new": 0,
+            "inprogress": 1,
+            "archived": 2
+        }
+
         self.standard_error = []
 
     def _get_messages(self) -> None:
@@ -1305,11 +1312,59 @@ class RedditOutput(BaseOutput):
                     user_agent="Reddit Notifications for macOS menubar"
                 )
 
-                reddit_username = reddit.user.me().name
+                reddit_user = reddit.user.me()
+                reddit_username = reddit_user.name
 
                 unread_messages = list(reddit.inbox.unread(limit=None))
                 # getting all messages instead of just unread
                 # all_messages = reddit.inbox.all(limit=5)
+
+                if reddit_user.is_mod and reddit_user.has_mod_mail and reddit_user.new_modmail_exists:
+                    modmail_conversations = []
+                    for subreddit in reddit_user.moderated():
+                        try:
+                            # https://praw.readthedocs.io/en/stable/code_overview/other/modmail.html
+                            # subreddit.modmail returns ALL modmail across ALL subreddits regardless of subreddit object
+                            subreddit_modmail = subreddit.modmail
+                            for state, unread_conversation_count in subreddit_modmail.unread_count().items():
+                                # https://praw.readthedocs.io/en/stable/code_overview/models/modmailconversation.html
+                                for modmail_conversation in subreddit_modmail.conversations(state=state, sort="unread"):
+                                    if (self.modmail_conversation_states.get(state) == modmail_conversation.state
+                                            and unread_conversation_count > 0):
+                                        setattr(modmail_conversation, "subreddit", subreddit)
+                                        modmail_conversations.append(modmail_conversation)
+                                        unread_conversation_count -= 1
+                        except Forbidden as fe:
+                            logger.warning(
+                                f"Unable to retrieve modmail from private subreddit "
+                                f"/r/{subreddit.display_name} with error {repr(fe)}."
+                            )
+
+                    for modmail_conversation in modmail_conversations:
+                        if modmail_conversation.last_unread:
+                            message_sent_after_last_user_mod_reply = True
+                            # https://praw.readthedocs.io/en/stable/code_overview/other/modmailmessage.html
+                            for modmail_message in reversed(modmail_conversation.messages):
+                                if message_sent_after_last_user_mod_reply:
+                                    if modmail_message.author.id != reddit_user.id:
+                                        setattr(modmail_message, "parent_id", modmail_conversation.id)
+                                        setattr(modmail_message, "subject", modmail_conversation.subject)
+                                        setattr(modmail_message, "created_utc", modmail_message.date)
+                                        setattr(modmail_message, "created_utc", datetime.strptime(
+                                            modmail_message.date, "%Y-%m-%dT%H:%M:%S.%f%z"
+                                        ).replace(tzinfo=timezone.utc).timestamp())
+                                        setattr(modmail_message, "body", modmail_message.body_markdown)
+                                        setattr(modmail_message, "dest",
+                                                f"Modmail for /r/{modmail_conversation.subreddit}")
+                                        setattr(modmail_message, "subreddit", modmail_conversation.subreddit)
+                                        setattr(modmail_message, "was_comment", False)
+                                        setattr(modmail_message, "was_modmail", True)
+                                        setattr(modmail_message, "context",
+                                                f"https://www.reddit.com/message/messages/{modmail_message.id}")
+
+                                        unread_messages.append(modmail_message)
+                                    else:
+                                        message_sent_after_last_user_mod_reply = False
 
                 self.unread_count += len(unread_messages)
                 self.all_unread_message_senders.update([message.author.name for message in unread_messages])
@@ -1317,7 +1372,7 @@ class RedditOutput(BaseOutput):
                 unread_df = pd.DataFrame(
                     columns=[
                         "id", "cid", "title", "timestamp", "sender", "body", "recipient", "subreddit", "comment",
-                        "context"
+                        "modmail", "context"
                     ]
                 )
 
@@ -1334,6 +1389,7 @@ class RedditOutput(BaseOutput):
                         unread_message.dest,
                         unread_message.subreddit,
                         unread_message.was_comment,
+                        unread_message.was_modmail if hasattr(unread_message, "was_modmail") else False,
                         unread_message.context
                     ]
                 logger.debug(f"\n{unread_df.to_string()}\n")
@@ -1354,6 +1410,7 @@ class RedditOutput(BaseOutput):
                 self.accounts_conversations[reddit_username] = conversations
 
             except (ResponseException, RequestException) as e:
+                logger.error(repr(e))
                 self.standard_error.extend([
                     "---",
                     "❗",
@@ -1363,6 +1420,7 @@ class RedditOutput(BaseOutput):
     def get_console_output(self) -> List[str]:
 
         self._get_messages()
+        # sys.exit()
 
         reddit_link = "https://www.reddit.com/message/inbox/"
 
@@ -1549,9 +1607,6 @@ class TelegramOutput(BaseOutput):
                     self.conversations[unread_message.cid] = TelegramConversation(unread_message)
                 else:
                     self.conversations.get(unread_message.cid).add_message(unread_message)
-
-            for conversation in self.conversations.values():  # type: TelegramConversation
-                conversation.sort_messages(descending=False)
 
     def get_console_output(self) -> List[str]:
 
