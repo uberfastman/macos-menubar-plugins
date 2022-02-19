@@ -1359,8 +1359,7 @@ class RedditOutput(BaseOutput):
                                         setattr(modmail_message, "subreddit", modmail_conversation.subreddit)
                                         setattr(modmail_message, "was_comment", False)
                                         setattr(modmail_message, "was_modmail", True)
-                                        setattr(modmail_message, "context",
-                                                f"https://www.reddit.com/message/messages/{modmail_message.id}")
+                                        setattr(modmail_message, "context", f"/message/messages/{modmail_message.id}")
 
                                         unread_messages.append(modmail_message)
                                     else:
