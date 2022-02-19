@@ -95,7 +95,7 @@ SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text"]
-# SUPPORTED_MESSAGE_TYPES = ["reddit"]
+SUPPORTED_MESSAGE_TYPES = ["reddit"]
 # SUPPORTED_MESSAGE_TYPES = ["telegram"]
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1246,7 +1246,10 @@ class RedditMessage(BaseMessage):
         else:
             self.context = f"/message/messages/{df_row.id}"
 
-        link_unread_message = sanitize_url(f"https://www.reddit.com{self.context}")
+        if self.is_modmail:
+            link_unread_message = sanitize_url(f"https://mod.reddit.com{self.context}")
+        else:
+            link_unread_message = sanitize_url(f"https://www.reddit.com{self.context}")
         self.menubar_msg_display_str = f"href={link_unread_message} tooltip={link_unread_message} "
 
 
@@ -1359,7 +1362,7 @@ class RedditOutput(BaseOutput):
                                         setattr(modmail_message, "subreddit", modmail_conversation.subreddit)
                                         setattr(modmail_message, "was_comment", False)
                                         setattr(modmail_message, "was_modmail", True)
-                                        setattr(modmail_message, "context", f"/message/messages/{modmail_message.id}")
+                                        setattr(modmail_message, "context", f"/mail/all/{modmail_conversation.id}")
 
                                         unread_messages.append(modmail_message)
                                     else:
