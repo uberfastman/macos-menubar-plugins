@@ -95,7 +95,7 @@ SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text"]
-SUPPORTED_MESSAGE_TYPES = ["reddit"]
+# SUPPORTED_MESSAGE_TYPES = ["reddit"]
 # SUPPORTED_MESSAGE_TYPES = ["telegram"]
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ END SET CUSTOM LOCAL VARIABLES ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
