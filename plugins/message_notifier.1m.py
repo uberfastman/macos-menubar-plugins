@@ -54,7 +54,7 @@ from pync import Notifier
 from telethon.sessions import StringSession
 # noinspection PyProtectedMember
 from telethon.sync import TelegramClient, Dialog, Message
-from telethon.tl.types import User
+from telethon.tl.types import User, MessageActionContactSignUp
 
 sys.dont_write_bytecode = True
 
@@ -174,6 +174,7 @@ class BaseMessage(object):
         self.body_wrapped = textwrap.wrap(self.body, max_line_characters + 1, break_long_words=False)
         self.attachment = 0
         self.menubar_msg_display_str = menubar_msg_display_str
+        self.system = False
 
     def get_message_len(self) -> int:
         # return len(self.body.encode("ascii", "ignore"))
@@ -701,7 +702,15 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                 f"size={FONT_SIZE_FOR_TIMESTAMP}"
             )
             msg_sender_start_str = f"--{ANSI_RED}({message.sender}) {ANSI_GREEN}"
-            msg_format_str = f"--{ANSI_GREEN}"
+            msg_format_str = f"--{ANSI_GREEN if not message.system else ''}"
+            # update display string if message is a system message
+            message_display_str = (
+                f"{ANSI_OFF if not message.system else ''} "
+                f"| ansi={'true' if not message.system else 'false'} refresh=true "
+            )
+            system_format_str = f" {message.menubar_msg_display_str} color={CSS_GRAY} font={FONT_ITALIC}"
+            # add display string if message is a system message
+            msg_system_format_str = system_format_str if message.system else ""
 
             if message.attachment == 1:
                 if message.get_message_len() == 0:
@@ -744,35 +753,36 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                     standard_output.append(timestamp_display_str)
                     standard_output.append(
                         f"{msg_sender_start_str}{message.body_short}"
-                        f"{message_display_str}{message.menubar_msg_display_str}"
+                        f"{message_display_str}{message.menubar_msg_display_str}{msg_system_format_str}"
                     )
                 else:
                     standard_output.append(timestamp_display_str)
                     standard_output.append(
                         f"{msg_format_str}{message.body_short}{message_display_str}{message.menubar_msg_display_str}"
+                        f"{msg_system_format_str}"
                     )
                 for line in message.body_wrapped:
                     standard_output.append(
                         f"----{ANSI_OFF}{line}{message_display_str}{message.menubar_msg_display_str}"
+                        f"{msg_system_format_str}"
                     )
 
             elif message.get_message_len() == 0:
                 standard_output.append(timestamp_display_str)
-                standard_output.append(
-                    f"--No message content"
-                    f"| {message.menubar_msg_display_str} color={CSS_GRAY} font={FONT_ITALIC}"
-                )
+                standard_output.append(f"--No message content | {system_format_str}")
 
             else:
                 if conversation.is_group_conversation:
                     standard_output.append(timestamp_display_str)
                     standard_output.append(
                         f"{msg_sender_start_str}{message.body}{message_display_str}{message.menubar_msg_display_str}"
+                        f"{msg_system_format_str}"
                     )
                 else:
                     standard_output.append(timestamp_display_str)
                     standard_output.append(
                         f"{msg_format_str}{message.body}{message_display_str}{message.menubar_msg_display_str}"
+                        f"{msg_system_format_str}"
                     )
 
             if conversation.messages.index(message) != (len(conversation.messages) - 1):
@@ -1489,6 +1499,8 @@ class TelegramMessage(BaseMessage):
         deep_link_unread_message = sanitize_url(f"tg://openmessage{self.context}")
         self.menubar_msg_display_str = f"href={deep_link_unread_message} tooltip={deep_link_unread_message} "
 
+        self.system = df_row.system
+
 
 class TelegramConversation(BaseConversation):
 
@@ -1538,7 +1550,7 @@ class TelegramOutput(BaseOutput):
             unread_df = pd.DataFrame(
                 columns=[
                     "id", "cid", "title", "timestamp", "sender", "body", "attachment", "attachment_type",
-                    "attachment_file", "attachment_has_thumbnail", "context"
+                    "attachment_file", "attachment_has_thumbnail", "context", "system"
                 ]
             )
 
@@ -1560,6 +1572,12 @@ class TelegramOutput(BaseOutput):
                             sender_name += f"({sender.username})"
 
                         sender_name = sender_name.strip()
+
+                        setattr(message, "system", False)
+                        if message.action:
+                            if isinstance(message.action, MessageActionContactSignUp):
+                                message.message = f"{sender_name} joined Telegram"
+                                message.system = True
 
                         media_exists = 0
                         media_type = None
@@ -1589,7 +1607,9 @@ class TelegramOutput(BaseOutput):
                             media_type,
                             media_thumb_str,
                             media_has_thumbnail,
-                            f"user_id={sender.id}&message_id={message.id}"
+                            f"user_id={sender.id}&message_id={message.id}",
+                            message.system
+
                         ]
 
                         unread_count -= 1
