@@ -1379,7 +1379,11 @@ class RedditOutput(BaseOutput):
                                         message_sent_after_last_user_mod_reply = False
 
                 self.unread_count += len(unread_messages)
-                self.all_unread_message_senders.update([message.author.name for message in unread_messages])
+                self.all_unread_message_senders.update(
+                    [message.author.name if message.author
+                     else f"{message.distinguished} of {message.subreddit_name_prefixed}"
+                     for message in unread_messages]
+                )
 
                 unread_df = pd.DataFrame(
                     columns=[
@@ -1396,7 +1400,8 @@ class RedditOutput(BaseOutput):
                         unread_message.subject,
                         unread_message.created_utc,
                         # message.created,
-                        unread_message.author.name if unread_message.author else unread_message.distinguished,
+                        (unread_message.author.name if unread_message.author
+                         else f"{unread_message.distinguished} of {unread_message.subreddit_name_prefixed}"),
                         unread_message.body,
                         unread_message.dest,
                         unread_message.subreddit,
