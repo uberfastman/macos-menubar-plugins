@@ -85,7 +85,7 @@ FONT_ITALIC = "HelveticaNeue-Italic"
 FONT_SIZE_FOR_TITLE = 10
 FONT_SIZE_FOR_TIMESTAMP = 8
 
-LOG_LEVEL = logging.WARN  # Logging levels: logging.INFO, logging.DEBUG, logging.WARN, logging.ERROR
+LOG_LEVEL = logging.WARN  # Logging levels: logging.DEBUG, logging.INFO, logging.WARN, logging.ERROR
 # LOG_LEVEL = logging.DEBUG
 
 PERSISTENT_DATA_COLUMNS = ["id", "type", "timestamp", "username", "sender"]
@@ -1308,7 +1308,8 @@ class RedditOutput(BaseOutput):
         self.modmail_conversation_states = {
             "new": 0,
             "inprogress": 1,
-            "archived": 2
+            "archived": 2,
+            "mod": 0
         }
 
         self.standard_error = []
@@ -1348,7 +1349,7 @@ class RedditOutput(BaseOutput):
                                         modmail_conversations.append(modmail_conversation)
                                         unread_conversation_count -= 1
                         except Forbidden as fe:
-                            logger.warning(
+                            logger.debug(
                                 f"Unable to retrieve modmail from private subreddit "
                                 f"/r/{subreddit.display_name} with error {repr(fe)}."
                             )
