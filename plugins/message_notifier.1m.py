@@ -837,9 +837,12 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
     ]
 
     if not newly_processed_messages_df.empty:
-        all_processed_messages_df = all_processed_messages_df.append(newly_processed_messages_df)
+        all_processed_messages_df = all_processed_messages_df[all_processed_messages_df["type"] != message_type]
+        all_processed_messages_df = all_processed_messages_df.append(unread_messages_df)
         all_processed_messages_df.drop_duplicates(inplace=True)
         all_processed_messages_df.rename_axis("uuid", inplace=True)
+        all_processed_messages_df["timestamp"] = pd.to_datetime(all_processed_messages_df["timestamp"])
+        all_processed_messages_df.sort_values(by=["timestamp"], inplace=True)
 
         # noinspection PyTypeChecker
         all_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
@@ -1354,6 +1357,7 @@ class RedditOutput(BaseOutput):
                             # subreddit.modmail returns ALL modmail across ALL subreddits regardless of subreddit object
                             subreddit_modmail = subreddit.modmail
                             for state, unread_conversation_count in subreddit_modmail.unread_count().items():
+                                logger.debug(f"Modmail (state: {state}) unread count: {unread_conversation_count}")
                                 original_unread_conversation_count = unread_conversation_count
                                 # https://praw.readthedocs.io/en/stable/code_overview/models/modmailconversation.html
                                 for modmail_conversation in subreddit_modmail.conversations(state=state, sort="unread"):
@@ -1376,8 +1380,11 @@ class RedditOutput(BaseOutput):
                             # https://praw.readthedocs.io/en/stable/code_overview/other/modmailmessage.html
                             for modmail_message in reversed(modmail_conversation.messages):
                                 if message_sent_after_last_user_mod_reply:
-                                    if (modmail_message.author.id != reddit_user.id and
-                                            unread_modmail_conversation_count > 0):
+                                    # TODO: figure out how to check reddit mod discussions for actual unread count
+                                    if (
+                                        modmail_message.author.id != reddit_user.id
+                                        # and unread_modmail_conversation_count > 0
+                                    ):
                                         setattr(modmail_message, "parent_id", modmail_conversation.id)
                                         setattr(modmail_message, "subject", modmail_conversation.subject)
                                         setattr(modmail_message, "created_utc", modmail_message.date)
