@@ -330,6 +330,10 @@ def format_timestamp(timestamp: Union[str, float, datetime]) -> str:
         return f"{message_timestamp_str} ({weekday_str} - {day_delta} day{'s' if day_delta > 1 else ''} ago)"
 
 
+def get_unique_lowercase_df_index_values(df: pd.DataFrame) -> Set[str]:
+    return set([str(value).lower() for value in df.index.tolist()])
+
+
 def sanitize_url(url_str: str) -> str:
     url = parse.urlsplit(url_str)
     url = list(url)
@@ -795,41 +799,50 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
         standard_output.append("-----")
         message_num += 1
 
+    unread_messages_df = pd.DataFrame.from_dict(unread_messages, orient="index", columns=PERSISTENT_DATA_COLUMNS)
+    unread_messages_uuids = get_unique_lowercase_df_index_values(unread_messages_df)
+
     # create data directory if it does not exist
     data_dir = local_dir / "resources" / "data"
     if not data_dir.is_dir():
         os.makedirs(data_dir)
 
-    processed_message_ids = set()
-    processed_message_senders = set()
     all_processed_messages_df = pd.DataFrame(columns=PERSISTENT_DATA_COLUMNS)
     try:
         all_processed_messages_df = pd.read_csv(data_dir / "processed_messages.csv", index_col=0)
-        processed_messages_df = all_processed_messages_df[all_processed_messages_df["type"] == message_type]
-        uuids = processed_messages_df.index.tolist()
-        processed_message_ids = set([str(message_id).lower() for message_id in uuids])
-        processed_message_senders = set(processed_messages_df["sender"].to_list())
-
+        all_processed_messages_df.drop_duplicates(inplace=True)
+        all_processed_messages_df.rename_axis("uuid", inplace=True)
     except FileNotFoundError:
         logger.debug("File processed_messages.csv does not exist, and will be created.")
     except EmptyDataError:
         logger.debug("File processed_messages.csv is empty, and will be populated.")
 
-    # if not message_ids.issubset(processed_messages):
-    if not set(unread_messages.keys()).issubset(processed_message_ids):
-        unread_messages_df = pd.DataFrame.from_dict(unread_messages, orient="index", columns=PERSISTENT_DATA_COLUMNS)
-        all_processed_messages_df = all_processed_messages_df.append(unread_messages_df)
-        all_processed_messages_df.drop_duplicates(inplace=True)
-        all_processed_messages_df.rename_axis("uuid", inplace=True)
-        # noinspection PyTypeChecker
-        all_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
+    processed_messages_df = all_processed_messages_df[all_processed_messages_df["type"] == message_type]
+    processed_message_uuids = get_unique_lowercase_df_index_values(processed_messages_df)
+
+    if not set(unread_messages.keys()).issubset(processed_message_uuids):
+        processed_messages_df = processed_messages_df.append(unread_messages_df)
+        processed_messages_df.drop_duplicates(inplace=True)
+        processed_messages_df.rename_axis("uuid", inplace=True)
 
         send_macos_notification(
             unread,
-            all_unread_message_senders if all_unread_message_senders else processed_message_senders,
+            all_unread_message_senders or set(processed_messages_df["sender"].to_list()),
             "Messages",
             arguments
         )
+
+    newly_processed_messages_df = unread_messages_df[
+        unread_messages_df.index.isin(unread_messages_uuids.difference(processed_message_uuids))
+    ]
+
+    if not newly_processed_messages_df.empty:
+        all_processed_messages_df = all_processed_messages_df.append(newly_processed_messages_df)
+        all_processed_messages_df.drop_duplicates(inplace=True)
+        all_processed_messages_df.rename_axis("uuid", inplace=True)
+
+        # noinspection PyTypeChecker
+        all_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
 
     return standard_output
 
@@ -1341,12 +1354,15 @@ class RedditOutput(BaseOutput):
                             # subreddit.modmail returns ALL modmail across ALL subreddits regardless of subreddit object
                             subreddit_modmail = subreddit.modmail
                             for state, unread_conversation_count in subreddit_modmail.unread_count().items():
+                                original_unread_conversation_count = unread_conversation_count
                                 # https://praw.readthedocs.io/en/stable/code_overview/models/modmailconversation.html
                                 for modmail_conversation in subreddit_modmail.conversations(state=state, sort="unread"):
                                     if (self.modmail_conversation_states.get(state) == modmail_conversation.state
                                             and unread_conversation_count > 0):
                                         setattr(modmail_conversation, "subreddit", subreddit)
-                                        modmail_conversations.append(modmail_conversation)
+                                        modmail_conversations.append(
+                                            (modmail_conversation, original_unread_conversation_count)
+                                        )
                                         unread_conversation_count -= 1
                         except Forbidden as fe:
                             logger.debug(
@@ -1354,13 +1370,14 @@ class RedditOutput(BaseOutput):
                                 f"/r/{subreddit.display_name} with error {repr(fe)}."
                             )
 
-                    for modmail_conversation in modmail_conversations:
+                    for modmail_conversation, unread_modmail_conversation_count in modmail_conversations:
                         if modmail_conversation.last_unread:
                             message_sent_after_last_user_mod_reply = True
                             # https://praw.readthedocs.io/en/stable/code_overview/other/modmailmessage.html
                             for modmail_message in reversed(modmail_conversation.messages):
                                 if message_sent_after_last_user_mod_reply:
-                                    if modmail_message.author.id != reddit_user.id:
+                                    if (modmail_message.author.id != reddit_user.id and
+                                            unread_modmail_conversation_count > 0):
                                         setattr(modmail_message, "parent_id", modmail_conversation.id)
                                         setattr(modmail_message, "subject", modmail_conversation.subject)
                                         setattr(modmail_message, "created_utc", modmail_message.date)
@@ -1376,6 +1393,7 @@ class RedditOutput(BaseOutput):
                                         setattr(modmail_message, "context", f"/mail/all/{modmail_conversation.id}")
 
                                         unread_messages.append(modmail_message)
+                                        unread_modmail_conversation_count -= 1
                                     else:
                                         message_sent_after_last_user_mod_reply = False
 
