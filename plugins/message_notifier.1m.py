@@ -576,18 +576,17 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                             img_format = "JPEG"
 
                     elif mime_type == "image/gif":
-                        # TODO: fix handling of GIFs
-                        # img = Image.open(path_str)
-                        # img_format = "GIF"
-                        pass
+                        # TODO: improve handling of GIFs
+                        img = Image.open(path_str)
+                        img_format = "GIF"
+                        # pass
 
                     elif mime_type == "image/png":
-                        # pass
                         img = Image.open(path_str)
                         img_format = "PNG"
+                        # pass
 
                     elif mime_type == "image/heic":
-                        # pass
                         heif_file = pyheif.read(path_str)
 
                         img = Image.frombytes(
@@ -599,6 +598,7 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                             heif_file.stride,
                         )
                         img_format = "HEIC"
+                        # pass
 
                     else:
                         # TODO: handle more image MIME types
@@ -820,18 +820,6 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
     processed_messages_df = all_processed_messages_df[all_processed_messages_df["type"] == message_type]
     processed_message_uuids = get_unique_lowercase_df_index_values(processed_messages_df)
 
-    if not set(unread_messages.keys()).issubset(processed_message_uuids):
-        processed_messages_df = processed_messages_df.append(unread_messages_df)
-        processed_messages_df.drop_duplicates(inplace=True)
-        processed_messages_df.rename_axis("uuid", inplace=True)
-
-        send_macos_notification(
-            unread,
-            all_unread_message_senders or set(processed_messages_df["sender"].to_list()),
-            "Messages",
-            arguments
-        )
-
     newly_processed_messages_df = unread_messages_df[
         unread_messages_df.index.isin(unread_messages_uuids.difference(processed_message_uuids))
     ]
@@ -846,6 +834,14 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
 
         # noinspection PyTypeChecker
         all_processed_messages_df.to_csv(data_dir / "processed_messages.csv", header=PERSISTENT_DATA_COLUMNS)
+
+    if not set(unread_messages.keys()).issubset(processed_message_uuids):
+        send_macos_notification(
+            unread,
+            all_unread_message_senders or set(unread_messages_df["sender"].to_list()),
+            "Messages",
+            arguments
+        )
 
     return standard_output
 
