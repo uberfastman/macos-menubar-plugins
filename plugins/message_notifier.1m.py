@@ -365,37 +365,36 @@ def encode_image(image_file_path: Path, unread_count: int = 0) -> str:
 
     img_width, img_height = img.size
 
+    unread_count_str = f"{unread_count if unread_count > 0 else '...'}"
+
+    font = ImageFont.truetype(str(FONT_FOR_TEXT_PATH), menubar_icon_font_size)
+    ascent, descent = font.getmetrics()
+    # offset_y = space above letters
+    # ascent - offset_y = height of letters (not counting tails)
+    # descent = space below letters (for tails)
+    # noinspection PyUnresolvedReferences
+    (width, baseline), (offset_x, offset_y) = font.font.getsize(unread_count_str)
+
+    percent_height_shift = int(img_height * 0.06)
+    x = int((img_width - width) / 2)
+    y = int((img_height - ((ascent + offset_y + descent) - percent_height_shift)) / 2)
+    position = (x, y)
+
+    draw = ImageDraw.Draw(img)
+
+    # macOS colors: https://developer.apple.com/design/human-interface-guidelines/macos/visual-design/color/
+    # reddit colors: https://www.designpieces.com/palette/reddit-brand-colors-hex-and-rgb/
     if unread_count > 0:
-        unread_count_str = f"{unread_count}"
-
-        font = ImageFont.truetype(str(FONT_FOR_TEXT_PATH), menubar_icon_font_size)
-        ascent, descent = font.getmetrics()
-        # offset_y = space above letters
-        # ascent - offset_y = height of letters (not counting tails)
-        # descent = space below letters (for tails)
-        # noinspection PyUnresolvedReferences
-        (width, baseline), (offset_x, offset_y) = font.font.getsize(unread_count_str)
-
-        percent_height_shift = int(img_height * 0.06)
-        x = int((img_width - width) / 2)
-        y = int((img_height - ((ascent + offset_y + descent) - percent_height_shift)) / 2)
-        position = (x, y)
-
-        draw = ImageDraw.Draw(img)
-
-        # macOS colors: https://developer.apple.com/design/human-interface-guidelines/macos/visual-design/color/
-        # draw.text(position, value, (255, 69, 58, 255), font=font)
-        # reddit colors: https://www.designpieces.com/palette/reddit-brand-colors-hex-and-rgb/
-        draw.text(position, unread_count_str, (255, 69, 0, 255), font=font)
-
-        img.save(image_bytes, format="PNG")
-
-        # img.show()
-
-        return base64.b64encode(image_bytes.getvalue()).decode("utf-8")
-
+        menubar_icon_text_color = (255, 69, 0, 255)  # reddit orange
+        # menubar_icon_text_color = (255, 69, 58, 255)  # macos red (dark)
     else:
-        img.save(image_bytes, format="PNG")
+        menubar_icon_text_color = (152, 152, 157, 255)  # macos grey (dark)
+    draw.text(position, unread_count_str, menubar_icon_text_color, font=font)
+
+    # include only the below code to remove menubar icon text
+    img.save(image_bytes, format="PNG")
+
+    # img.show()
 
     return base64.b64encode(image_bytes.getvalue()).decode("utf-8")
 
