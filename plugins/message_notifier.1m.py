@@ -1180,7 +1180,8 @@ class TextOutput(BaseOutput):
             deep_link_conversation = (
                 f"bash={str(self.project_root_dir)}/resources/scripts/{open_script} {script_params} "
                 f"terminal=false "
-                f"tooltip='Open Messages to this conversation'"
+                f"tooltip='Open Messages to this conversation' "
+                f"refresh=true "
             )
 
             text_message = TextMessage(
@@ -1205,7 +1206,8 @@ class TextOutput(BaseOutput):
         display_str = (
             f"bash={str(self.project_root_dir)}/resources/scripts/open_text_messages.sh "
             f"terminal=false "
-            f"tooltip='Open Messages'"
+            f"tooltip='Open Messages' "
+            f"refresh=true "
         )
 
         standard_output = []
@@ -1312,7 +1314,11 @@ class RedditOutput(BaseOutput):
         self.accounts_conversations = {}  # type: Dict[str, OrderedDict]
         self.unread_count = 0
         link_unread = "https://www.reddit.com/message/unread/"
-        self.unread_display_str = f"href={link_unread} tooltip={link_unread} "
+        self.unread_display_str = (
+            f"href={link_unread} "
+            f"tooltip={link_unread} "
+            f"refresh=true "
+        )
         self.all_unread_message_senders = set()
 
         # https://gist.github.com/leviroth/dafcf1331737e2b55dd6fb86257dcb8d
@@ -1466,11 +1472,18 @@ class RedditOutput(BaseOutput):
         for reddit_username, conversations in self.accounts_conversations.items():
 
             if len(conversations) == 0:
+
+                read_display_str = (
+                    f"href={reddit_link} "
+                    f"tooltip={reddit_link} "
+                    f"refresh=true "
+                )
+
                 standard_output.extend(
                     generate_output_read(
                         self.project_root_dir,
                         self.message_type,
-                        f"href={reddit_link} tooltip={reddit_link}",
+                        read_display_str,
                         reddit_username
                     )
                 )
@@ -1523,7 +1536,11 @@ class TelegramMessage(BaseMessage):
         self.context = f"?{df_row.context}" if df_row.context else ""
 
         deep_link_unread_message = sanitize_url(f"tg://openmessage{self.context}")
-        self.menubar_msg_display_str = f"href={deep_link_unread_message} tooltip={deep_link_unread_message} "
+        self.menubar_msg_display_str = (
+            f"href={deep_link_unread_message} "
+            f"tooltip={deep_link_unread_message} "
+            f"refresh=true "
+        )
 
         self.system = df_row.system
 
@@ -1664,11 +1681,18 @@ class TelegramOutput(BaseOutput):
 
         standard_output = []
         if len(self.conversations) == 0:
+
+            read_display_str = (
+                f"href={telegram_deep_link} "
+                f"tooltip={telegram_deep_link} "
+                f"refresh=true "
+            )
+
             standard_output.extend(
                 generate_output_read(
                     self.project_root_dir,
                     self.message_type,
-                    f"href={telegram_deep_link} tooltip={telegram_deep_link}",
+                    read_display_str,
                     self.telegram_username
                 )
             )
@@ -1731,7 +1755,7 @@ if __name__ == "__main__":
         print(f"| color={HEX_ORANGE} image={unread_icon}")
     else:
         all_read_icon = Icons(project_root).all_read_icon
-        print(f"|image={all_read_icon} dropdown=false")
+        print(f"| image={all_read_icon} dropdown=false")
 
     for line in standard_output:
         print(line)
