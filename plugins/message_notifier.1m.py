@@ -91,9 +91,6 @@ LOG_LEVEL = logging.WARN  # Logging levels: logging.DEBUG, logging.INFO, logging
 PERSISTENT_DATA_COLUMNS = ["id", "type", "timestamp", "username", "sender"]
 
 SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
-# SUPPORTED_MESSAGE_TYPES = ["text", "reddit"]
-# SUPPORTED_MESSAGE_TYPES = ["text", "telegram"]
-# SUPPORTED_MESSAGE_TYPES = ["reddit", "telegram"]
 # SUPPORTED_MESSAGE_TYPES = ["text"]
 # SUPPORTED_MESSAGE_TYPES = ["reddit"]
 # SUPPORTED_MESSAGE_TYPES = ["telegram"]
@@ -195,18 +192,20 @@ class BaseConversation(object):
         self.title = f"{ANSI_OFF}{message_obj.title}{ANSI_YELLOW}" if message_obj.title else ""
         self.most_recent_timestamp = message_obj.timestamp
         self.messages = [message_obj]
+        self.message_ids = [message_obj.id]
         self.participants = {message_obj.sender}
         self.is_group_conversation = False
         self.menubar_msg_display_str = message_obj.menubar_msg_display_str
 
     def add_message(self, message_obj: BaseMessage, sort_after_add: bool = True) -> None:
-        if message_obj.cid == self.id:
+        if message_obj.cid == self.id and message_obj.id not in self.message_ids:
             self.most_recent_timestamp = (
                 message_obj.timestamp
                 if message_obj.timestamp > self.most_recent_timestamp
                 else self.most_recent_timestamp
             )
             self.messages.append(message_obj)
+            self.message_ids.append(message_obj.id)
             self.participants.add(message_obj.sender)
             if len(self.participants) > 1:
                 self.is_group_conversation = True
@@ -215,6 +214,8 @@ class BaseConversation(object):
 
             if sort_after_add:
                 self.sort_messages()
+        elif message_obj.id in self.message_ids:
+            logger.debug("Skipping addition of duplicate Message (matching preexisting ID) to Conversation.")
         else:
             raise ValueError("Cannot add Message with mismatching id to Conversation!")
 
@@ -942,7 +943,7 @@ class TextOutput(BaseOutput):
     @staticmethod
     def _sqlite_query_get_messages() -> str:
         return """
-            SELECT 
+            SELECT DISTINCT
                 msg.guid as id, 
                 cht.rowid as rowid, 
                 cht.guid as cguid, 
@@ -1009,7 +1010,7 @@ class TextOutput(BaseOutput):
     @staticmethod
     def _sqlite_query_get_messages_recent() -> str:
         return """
-            SELECT 
+            SELECT DISTINCT
                 msg.guid as id, 
                 cht.rowid as rowid, 
                 cht.guid as cguid, 
@@ -1077,7 +1078,7 @@ class TextOutput(BaseOutput):
     @staticmethod
     def _sqlite_query_get_messages_group_chat() -> str:
         return """
-            SELECT 
+            SELECT DISTINCT
                 cht.chat_identifier as cid, 
                 strftime(
                     '%m-%d-%Y %H:%M:%S', 
@@ -1153,7 +1154,6 @@ class TextOutput(BaseOutput):
             ]
         )
         logging.debug(f"\n{unread_df.to_string()}\n")
-        self.unread_count = len(unread_df.index)
 
         # self.cursor.execute(self._sqlite_query_get_messages_recent())
         # recent_df = pd.DataFrame(
@@ -1198,6 +1198,8 @@ class TextOutput(BaseOutput):
                 )
             else:
                 self.conversations.get(text_message.cid).add_message(text_message)
+
+        self.unread_count = sum([conversation.get_message_count() for conversation in self.conversations.values()])
 
     def get_console_output(self) -> List[str]:
 

@@ -7,12 +7,12 @@
 # Python
 *.pyc
 
-# credentials
+# Credentials
 private*.json
+message-notifier*.json
 
-# persistent data
+# Persistent Data
 *.csv
 
-# testing
+# Testing
 test/
-
