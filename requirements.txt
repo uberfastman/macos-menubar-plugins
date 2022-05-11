@@ -1,7 +1,7 @@
 opencv-python==4.5.5.64
 pandas==1.4.2
 pillow==9.1.0
-praw==7.5.0
+praw==7.6.0
 prawcore==2.3.0
 pyheif==0.7.0
 pymediainfo==5.1.0
