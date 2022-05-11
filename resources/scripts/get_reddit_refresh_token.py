@@ -68,7 +68,7 @@ def main():
         client_id=client_id.strip(),
         client_secret=client_secret.strip(),
         redirect_uri="http://localhost:8080",
-        user_agent="praw_refresh_token_example",
+        user_agent="macos_menubar_notifications_script",
     )
     state = str(random.randint(0, 65000))
     url = reddit.auth.url(scopes, state, "permanent")
@@ -91,6 +91,8 @@ def main():
     elif "error" in params:
         send_message(client, params["error"])
         return 1
+
+    print(f"Callback code: {params['code']}")
 
     refresh_token = reddit.auth.authorize(params["code"])
     send_message(client, f"Refresh token: {refresh_token}")

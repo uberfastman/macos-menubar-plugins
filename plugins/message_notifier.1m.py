@@ -141,7 +141,7 @@ CSS_GRAY = "gray"
 # noinspection PyShadowingNames
 class Icons(object):
 
-    def __init__(self, directory: Path, unread_count: int = 0):
+    def __init__(self, directory: Path, unread_count: int = 0, standard_error: bool = False):
 
         # check if macOS device is using a dark mode or light mode
         if call("defaults read -g AppleInterfaceStyle", shell=True, stdout=DEVNULL, stderr=STDOUT) == 0:
@@ -150,10 +150,13 @@ class Icons(object):
             macos_display_mode = "light"
 
         self.all_read_icon = encode_image(
-            directory / "resources" / "images" / f"message_notifier_icon_{macos_display_mode}.png"
+            directory / "resources" / "images" / f"message_notifier_icon_{macos_display_mode}.png",
+            standard_error=standard_error
         )
         self.unread_icon = encode_image(
-            directory / "resources" / "images" / f"message_notifier_icon_{macos_display_mode}.png", unread_count
+            directory / "resources" / "images" / f"message_notifier_icon_{macos_display_mode}.png",
+            unread_count=unread_count,
+            standard_error=standard_error
         )
 
 
@@ -249,6 +252,7 @@ class BaseOutput(ABC):
         self.credentials = credentials
         self.project_root_dir = project_root_dir
         self.unread_count = None
+        self.standard_error = []
 
     @abstractmethod
     def _get_messages(self) -> None:
@@ -343,7 +347,7 @@ def sanitize_url(url_str: str) -> str:
 
 
 # noinspection PyShadowingNames
-def encode_image(image_file_path: Path, unread_count: int = 0) -> str:
+def encode_image(image_file_path: Path, unread_count: int = 0, standard_error: bool = False) -> str:
     image_bytes = BytesIO()
     img = Image.open(image_file_path)
 
@@ -366,7 +370,7 @@ def encode_image(image_file_path: Path, unread_count: int = 0) -> str:
 
     img_width, img_height = img.size
 
-    unread_count_str = f"{unread_count if unread_count > 0 else '...'}"
+    unread_count_str = f"{unread_count if unread_count > 0 else '...'}{'E' if standard_error else ''}"
 
     font = ImageFont.truetype(str(FONT_FOR_TEXT_PATH), menubar_icon_font_size)
     ascent, descent = font.getmetrics()
@@ -908,6 +912,8 @@ class TextOutput(BaseOutput):
         self.conversations = OrderedDict()
         self.unread_count = 0
 
+        self.standard_error = []
+
     def _directory_size(self, directory_path: Path, total_size: int = 0) -> int:
         for child_path in directory_path.rglob("*"):
             if child_path.is_file():
@@ -1244,6 +1250,9 @@ class TextOutput(BaseOutput):
                 )
             )
 
+        if self.standard_error:
+            standard_output.extend(self.standard_error)
+
         return standard_output
 
 
@@ -1342,7 +1351,7 @@ class RedditOutput(BaseOutput):
                     client_id=reddit_account_credentials.get("client_id"),
                     client_secret=reddit_account_credentials.get("client_secret"),
                     refresh_token=reddit_account_credentials.get("refresh_token"),
-                    user_agent="Reddit Notifications for macOS menubar"
+                    user_agent="macOS Menubar Notifier for Reddit"
                 )
 
                 reddit_user = reddit.user.me()
@@ -1460,7 +1469,8 @@ class RedditOutput(BaseOutput):
                 self.standard_error.extend([
                     "---",
                     "❗",
-                    f"--{ANSI_RED}UNABLE TO RETRIEVE REDDIT ACCOUNT CONTENT WITH ERROR: {repr(e)}! | ansi=true"
+                    f"--{ANSI_RED}UNABLE TO RETRIEVE REDDIT ACCOUNT CONTENT WITH ERROR: {repr(e)}!{ANSI_OFF} | "
+                    f"ansi=true "
                 ])
 
     def get_console_output(self) -> List[str]:
@@ -1581,6 +1591,8 @@ class TelegramOutput(BaseOutput):
 
         telegram_deep_link = "tg://"
         self.unread_display_str = f"href={telegram_deep_link} tooltip={telegram_deep_link} "
+
+        self.standard_error = []
 
     def _get_messages(self) -> None:
 
@@ -1718,6 +1730,9 @@ class TelegramOutput(BaseOutput):
                 )
             )
 
+        if self.standard_error:
+            standard_output.extend(self.standard_error)
+
         return standard_output
 
 
@@ -1736,6 +1751,7 @@ if __name__ == "__main__":
 
     unread_count = 0
     standard_output = []
+    standard_error = False
     for message_account_type in SUPPORTED_MESSAGE_TYPES:  # type: str
 
         spec = util.spec_from_file_location("message_notifier", Path(__file__).parent / "message_notifier.1m.py")
@@ -1747,16 +1763,18 @@ if __name__ == "__main__":
 
         standard_output.extend(message_account_output.get_console_output())
         unread_count += message_account_output.get_unread_count()
+        if message_account_output.standard_error:
+            standard_error = True
 
     standard_output.append("---")
     standard_output.append(F"Refresh | font={FONT_ITALIC} color={HEX_BLUE} refresh=true")
     standard_output.append("---")
 
     if unread_count > 0:
-        unread_icon = Icons(project_root, unread_count).unread_icon
+        unread_icon = Icons(project_root, unread_count, standard_error).unread_icon
         print(f"| color={HEX_ORANGE} image={unread_icon}")
     else:
-        all_read_icon = Icons(project_root).all_read_icon
+        all_read_icon = Icons(project_root, standard_error=standard_error).all_read_icon
         print(f"| image={all_read_icon} dropdown=false")
 
     for line in standard_output:
