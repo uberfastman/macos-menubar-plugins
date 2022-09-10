@@ -24,6 +24,7 @@ import calendar
 import json
 import logging
 import os
+from re import compile, UNICODE
 import sqlite3
 import sys
 import textwrap
@@ -35,12 +36,13 @@ from importlib import util
 from io import BytesIO
 from pathlib import Path
 from random import Random
-from subprocess import call, run, DEVNULL, PIPE, STDOUT
+from subprocess import call, run, CompletedProcess, DEVNULL, PIPE, STDOUT
 from typing import Dict, Set, List, Tuple, Union
 from urllib import parse
+import numpy as np
 from uuid import UUID
-
-import pandas as pd
+from pdf2image import convert_from_path
+from pandas import DataFrame, read_csv, concat, to_datetime
 import praw
 import pyheif
 import vobject
@@ -101,6 +103,9 @@ SUPPORTED_MESSAGE_TYPES = ["text", "reddit", "telegram"]
 # noinspection DuplicatedCode
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=LOG_LEVEL)
+
+# regex to remove unicode special characters: https://en.wikipedia.org/wiki/Specials_(Unicode_block)
+unicode_regex_pattern = compile(u"[\uFFF0-\uFFFF]", UNICODE)
 
 # Unicode character "⠀" (U+2800) for blank lines
 BLANK_CHAR = "⠀"
@@ -169,7 +174,8 @@ class BaseMessage(object):
         self.timestamp = convert_timestamp(df_row.timestamp)
         self.timestamp_str = format_timestamp(df_row.timestamp)
         self.sender = df_row.sender
-        self.body = df_row.body.replace('\n', ' ').replace('\r', '').strip() if df_row.body else ""
+        self.body = unicode_regex_pattern.sub("", df_row.body)  # required to remove unicode special characters
+        self.body = self.body.replace("\n", " ").replace("\r", "").strip() if df_row.body else ""
         self.body_short = f"{self.body[:max_line_characters]}..."
         self.body_wrapped = textwrap.wrap(self.body, max_line_characters + 1, break_long_words=False)
         self.attachment = 0
@@ -277,6 +283,40 @@ def create_deterministic_uuid(seed: str) -> str:
     return str(UUID(int=random_num_gen_with_seed.getrandbits(128), version=4))
 
 
+def get_subprocess_output(commands: list, piped_input: str = None, return_stdout_str: bool = False,
+                          return_stdout_and_exit_code: bool = False,
+                          return_completed_process: bool = False) -> Union[str, Tuple[str, int], CompletedProcess]:
+
+    if sum([return_stdout_str, return_stdout_and_exit_code, return_completed_process]) > 1:
+        raise ValueError("You cannot specify more than one return type.")
+
+    if piped_input:
+        output = run(commands, stdout=PIPE, stderr=PIPE, universal_newlines=True, input=piped_input)
+    else:
+        output = run(commands, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+
+    exit_code = output.returncode
+
+    if exit_code == 0:
+        if return_stdout_str:
+            return output.stdout
+        elif return_stdout_and_exit_code:
+            return output.stdout, exit_code
+        elif return_completed_process:
+            return output
+        else:
+            return output.stdout
+    else:
+        if return_stdout_str:
+            return output.stderr
+        elif return_stdout_and_exit_code:
+            return output.stderr, exit_code
+        elif return_completed_process:
+            return output
+        else:
+            return output.stderr
+
+
 def convert_timestamp(timestamp: Union[str, float, datetime]) -> datetime:
     # iMessage/SMS message timestamp: datetime string
     # Reddit message timestamp: floating point UTC epoch
@@ -335,7 +375,7 @@ def format_timestamp(timestamp: Union[str, float, datetime]) -> str:
         return f"{message_timestamp_str} ({weekday_str} - {day_delta} day{'s' if day_delta > 1 else ''} ago)"
 
 
-def get_unique_lowercase_df_index_values(df: pd.DataFrame) -> Set[str]:
+def get_unique_lowercase_df_index_values(df: DataFrame) -> Set[str]:
     return set([str(value).lower() for value in df.index.tolist()])
 
 
@@ -484,6 +524,39 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                         vcard = next(vcard_objects, None)
 
                     thumb_str.pop()
+
+                return thumb_str, attachment_has_image_thumbnail
+
+            elif mime_type == "application/pdf":
+
+                # TODO: figure out why SwiftBar is not displaying the image bytes produced within this block
+
+                poppler_info = get_subprocess_output(["brew", "info", "poppler"], return_completed_process=True)
+                poppler_version_info = get_subprocess_output(
+                    ["grep", "stable"],
+                    piped_input=poppler_info.stdout,
+                    return_completed_process=True
+                )
+                poppler_version = get_subprocess_output(
+                    ["awk", "{ print $3}"],
+                    piped_input=poppler_version_info.stdout,
+                    return_stdout_str=True
+                )
+
+                poppler_path = f"/opt/homebrew/Cellar/poppler/{poppler_version.strip()}/bin"
+
+                pdf_pages = convert_from_path(
+                    path_str,
+                    fmt="png",
+                    poppler_path=poppler_path,
+                    size=(THUMBNAIL_PIXEL_SIZE, None)
+                )
+
+                output, thumb_str, attachment_has_image_thumbnail = convert_image_to_bytes(
+                    output=BytesIO(),
+                    image=Image.fromarray(np.array(pdf_pages[0])),
+                    image_format="PNG"
+                )
 
                 return thumb_str, attachment_has_image_thumbnail
 
@@ -651,7 +724,7 @@ def generate_output_read(local_dir: Path, message_type: str, display_string: str
         os.makedirs(data_dir)
 
     # clear all processed message UUIDs once messages are read
-    all_processed_messages_df = pd.read_csv(data_dir / "processed_messages.csv", index_col=0)
+    all_processed_messages_df = read_csv(data_dir / "processed_messages.csv", index_col=0)
     all_other_processed_messages_df = all_processed_messages_df.loc[
         (all_processed_messages_df["type"] != message_type)
         | (all_processed_messages_df["username"] != username)
@@ -724,7 +797,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                 if message.get_message_len() == 0:
                     msg_attachment_str = (
                         f"{ANSI_MAGENTA}"
-                        f"(attachment{(' - ' + message.attachment_type) if message.attachment_type else ''}) "
+                        f"(attachment{(' - ' + message.attachment_type) if message.attachment_type else ''})"
                         f"{ANSI_GREEN}"
                     )
                 else:
@@ -794,7 +867,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
                     )
 
             if conversation.messages.index(message) != (len(conversation.messages) - 1):
-                standard_output.append(f"--{BLANK_CHAR} | size=2")
+                standard_output.append(f"--{BLANK_CHAR}| size=2")
 
             message_id = str(message.id).lower()
             message_uuid = create_deterministic_uuid(message_id)
@@ -803,7 +876,7 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
         standard_output.append("-----")
         message_num += 1
 
-    unread_messages_df = pd.DataFrame.from_dict(unread_messages, orient="index", columns=PERSISTENT_DATA_COLUMNS)
+    unread_messages_df = DataFrame.from_dict(unread_messages, orient="index", columns=PERSISTENT_DATA_COLUMNS)
     unread_messages_uuids = get_unique_lowercase_df_index_values(unread_messages_df)
 
     # create data directory if it does not exist
@@ -811,9 +884,9 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
     if not data_dir.is_dir():
         os.makedirs(data_dir)
 
-    all_processed_messages_df = pd.DataFrame(columns=PERSISTENT_DATA_COLUMNS)
+    all_processed_messages_df = DataFrame(columns=PERSISTENT_DATA_COLUMNS)
     try:
-        all_processed_messages_df = pd.read_csv(data_dir / "processed_messages.csv", index_col=0)
+        all_processed_messages_df = read_csv(data_dir / "processed_messages.csv", index_col=0)
         all_processed_messages_df.drop_duplicates(inplace=True)
         all_processed_messages_df.rename_axis("uuid", inplace=True)
     except FileNotFoundError:
@@ -830,10 +903,11 @@ def generate_output_unread(local_dir: Path, message_type: str, display_string: s
 
     if not newly_processed_messages_df.empty:
         all_processed_messages_df = all_processed_messages_df[all_processed_messages_df["type"] != message_type]
-        all_processed_messages_df = all_processed_messages_df.append(unread_messages_df)
+        # all_processed_messages_df = all_processed_messages_df.append(unread_messages_df)
+        all_processed_messages_df = concat([all_processed_messages_df, unread_messages_df])
         all_processed_messages_df.drop_duplicates(inplace=True)
         all_processed_messages_df.rename_axis("uuid", inplace=True)
-        all_processed_messages_df["timestamp"] = pd.to_datetime(all_processed_messages_df["timestamp"])
+        all_processed_messages_df["timestamp"] = to_datetime(all_processed_messages_df["timestamp"])
         all_processed_messages_df.sort_values(by=["timestamp"], inplace=True)
 
         # noinspection PyTypeChecker
@@ -884,7 +958,7 @@ class TextConversation(BaseConversation):
         if "chat" in text_message_obj.cid:
             self.is_group_conversation = True
             sqlite_cursor.execute(sqlite_query, (text_message_obj.cid, max_conversation_search_results))
-            group_chat_df = pd.DataFrame(
+            group_chat_df = DataFrame(
                 sqlite_cursor.fetchall(), columns=["cid", "timestamp", "contact", "number", "sender", "org"]
             )
             for df_row in group_chat_df.itertuples():
@@ -1137,12 +1211,9 @@ class TextOutput(BaseOutput):
     @staticmethod
     def _get_macos_full_name(macos_username: str) -> str:
 
-        output = run(["id", "-F", f"{macos_username}"], stdout=PIPE, stderr=PIPE, universal_newlines=True)
-        exit_code = output.returncode
-        standard_output = output.stdout
-
+        output, exit_code = get_subprocess_output(["id", "-F", f"{macos_username}"], return_stdout_and_exit_code=True)
         if exit_code == 0:
-            return standard_output.strip()
+            return output.strip()
         else:
             return macos_username
 
@@ -1152,13 +1223,19 @@ class TextOutput(BaseOutput):
         self.cursor.execute(self._sqlite_query_attach_contact_db())
         self.cursor.execute(self._sqlite_query_get_messages())
 
-        unread_df = pd.DataFrame(
+        unread_df = DataFrame(
             self.cursor.fetchall(),
             columns=[
                 "id", "rowid", "cguid", "cid", "groupid", "title", "timestamp", "contact", "number", "sender", "org",
                 "attachment", "attchtype", "attchfile", "body"
             ]
         )
+        logging.debug(f"\n{unread_df.to_string()}\n")
+
+        # remove duplicate entries from macOS messages sqlite database (it seems that in macOS Monterey sometimes
+        # there are duplicate rows for the same text which ONLY differ in the attached file name.
+        unread_df = unread_df.drop_duplicates(subset="id")
+        unread_df.reset_index(drop=True, inplace=True)
         logging.debug(f"\n{unread_df.to_string()}\n")
 
         # self.cursor.execute(self._sqlite_query_get_messages_recent())
@@ -1423,7 +1500,7 @@ class RedditOutput(BaseOutput):
                      for message in unread_messages]
                 )
 
-                unread_df = pd.DataFrame(
+                unread_df = DataFrame(
                     columns=[
                         "id", "cid", "title", "timestamp", "sender", "body", "recipient", "subreddit", "comment",
                         "modmail", "context"
@@ -1604,7 +1681,7 @@ class TelegramOutput(BaseOutput):
             telegram_user = client.get_me()  # type: User
             self.telegram_username = telegram_user.username
 
-            unread_df = pd.DataFrame(
+            unread_df = DataFrame(
                 columns=[
                     "id", "cid", "title", "timestamp", "sender", "body", "attachment", "attachment_type",
                     "attachment_file", "attachment_has_thumbnail", "context", "system"
