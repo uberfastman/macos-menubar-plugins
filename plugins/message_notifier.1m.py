@@ -174,7 +174,8 @@ class BaseMessage(object):
         self.timestamp = convert_timestamp(df_row.timestamp)
         self.timestamp_str = format_timestamp(df_row.timestamp)
         self.sender = df_row.sender
-        self.body = unicode_regex_pattern.sub("", df_row.body)  # required to remove unicode special characters
+        # required to remove unicode special characters
+        self.body = unicode_regex_pattern.sub("", df_row.body) if df_row.body else ""
         self.body = self.body.replace("\n", " ").replace("\r", "").strip() if df_row.body else ""
         self.body_short = f"{self.body[:max_line_characters]}..."
         self.body_wrapped = textwrap.wrap(self.body, max_line_characters + 1, break_long_words=False)
