@@ -47,6 +47,7 @@ import praw
 import pyheif
 import vobject
 from PIL import Image, ExifTags, ImageFilter, ImageDraw, ImageFont
+# noinspection PyUnresolvedReferences
 from cv2 import VideoCapture, imencode
 from dateutil import tz
 from pandas.errors import EmptyDataError
@@ -1234,7 +1235,7 @@ class TextOutput(BaseOutput):
         logging.debug(f"\n{unread_df.to_string()}\n")
 
         # remove duplicate entries from macOS messages sqlite database (it seems that in macOS Monterey sometimes
-        # there are duplicate rows for the same text which ONLY differ in the attached file name.
+        # there are duplicate rows for the same text which ONLY differ in the attached file name)
         unread_df = unread_df.drop_duplicates(subset="id")
         unread_df.reset_index(drop=True, inplace=True)
         logging.debug(f"\n{unread_df.to_string()}\n")
