@@ -1719,18 +1719,28 @@ class TelegramOutput(BaseOutput):
                         media_type = None
                         media_thumb_str = None
                         media_has_thumbnail = False
-                        if message.media:
-                            media_bytes = BytesIO()
-                            message.download_media(file=media_bytes)
 
-                            img = Image.open(media_bytes)
-                            # img.show()
-                            output, media_thumb_str, media_has_thumbnail = convert_image_to_bytes(
-                                BytesIO(), img, "JPEG"
-                            )
+                        if message.media:
 
                             media_exists = 1
-                            media_type = "image/jpeg"
+                            # telethon mime type reference: https://github.com/LonamiWebs/Telethon/blob/18da855dd4dc787b7aab08fecf3066bac80790ff/telethon/utils.py
+                            media_type = message.media.document.mime_type
+
+                            if "image" in media_type:
+                                media_bytes = BytesIO()
+                                message.download_media(file=media_bytes)
+
+                                img = Image.open(media_bytes)
+                                # img.show()
+                                output, media_thumb_str, media_has_thumbnail = convert_image_to_bytes(
+                                    BytesIO(), img, "JPEG"
+                                )
+                            elif "video" in media_type:
+                                # TODO: handle Telegram video attachments
+                                pass
+                            elif "audio" in media_type:
+                                # TODO: handle Telegram audio attachments
+                                pass
 
                         unread_df.loc[len(unread_df)] = [
                             message.id,
