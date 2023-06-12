@@ -1230,7 +1230,7 @@ class TextOutput(BaseOutput):
         message = None
         try:
             # code snippet for parsing attributed body field (starting with macOS Ventura) adapted from:
-            # https://medium.com/@kellytgold/extracting-imessage-and-address-book-data-b6e2e5729b21
+            # https://github.com/my-other-github-account/imessage_tools
             message = (
                 bytes.fromhex(attributed_body)
                 .decode("utf-8", errors="replace")
