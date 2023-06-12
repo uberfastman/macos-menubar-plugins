@@ -24,7 +24,6 @@ import calendar
 import json
 import logging
 import os
-from re import compile, UNICODE
 import sqlite3
 import sys
 import textwrap
@@ -36,13 +35,13 @@ from importlib import util
 from io import BytesIO
 from pathlib import Path
 from random import Random
+from re import compile, UNICODE
 from subprocess import call, run, CompletedProcess, DEVNULL, PIPE, STDOUT
 from typing import Dict, Set, List, Tuple, Union
 from urllib import parse
-import numpy as np
 from uuid import UUID
-from pdf2image import convert_from_path
-from pandas import DataFrame, read_csv, concat, to_datetime
+
+import numpy as np
 import praw
 import pyheif
 import vobject
@@ -50,7 +49,9 @@ from PIL import Image, ExifTags, ImageFilter, ImageDraw, ImageFont
 # noinspection PyUnresolvedReferences
 from cv2 import VideoCapture, imencode
 from dateutil import tz
+from pandas import DataFrame, read_csv, concat, to_datetime
 from pandas.errors import EmptyDataError
+from pdf2image import convert_from_path
 from prawcore.exceptions import ResponseException, RequestException, Forbidden
 from pymediainfo import MediaInfo
 from pync import Notifier
@@ -288,7 +289,6 @@ def create_deterministic_uuid(seed: str) -> str:
 def get_subprocess_output(commands: list, piped_input: str = None, return_stdout_str: bool = False,
                           return_stdout_and_exit_code: bool = False,
                           return_completed_process: bool = False) -> Union[str, Tuple[str, int], CompletedProcess]:
-
     if sum([return_stdout_str, return_stdout_and_exit_code, return_completed_process]) > 1:
         raise ValueError("You cannot specify more than one return type.")
 
@@ -333,9 +333,9 @@ def convert_timestamp(timestamp: Union[str, float, datetime]) -> datetime:
         local_time_zone = tz.tzlocal()
         timestamp = timestamp.replace(tzinfo=utc_time_zone)
         timestamp = timestamp.astimezone(local_time_zone)
-        timestamp = timestamp.strftime("%m-%d-%Y %H:%M:%S")
+        timestamp = timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
-    return datetime.strptime(str(timestamp), "%m-%d-%Y %H:%M:%S")
+    return datetime.strptime(str(timestamp), "%Y-%m-%d %H:%M:%S")
 
 
 # noinspection DuplicatedCode
@@ -393,13 +393,18 @@ def encode_image(image_file_path: Path, unread_count: int = 0, standard_error: b
     image_bytes = BytesIO()
     img = Image.open(image_file_path)
 
+    # TODO: figure out why menubar icon is pixelated/displayed in low resolution
     # check if macOS device is using a retina screen
     if call("system_profiler SPDisplaysDataType | grep -i 'retina'", shell=True, stdout=DEVNULL, stderr=STDOUT) == 0:
-        max_menubar_icon_height = 74
-        menubar_icon_font_size = 54
+        # max_menubar_icon_height = 74
+        # menubar_icon_font_size = 54
+        max_menubar_icon_height = 18
+        menubar_icon_font_size = 14
     else:
-        max_menubar_icon_height = 37
-        menubar_icon_font_size = 27
+        # max_menubar_icon_height = 37
+        # menubar_icon_font_size = 27
+        max_menubar_icon_height = 9
+        menubar_icon_font_size = 7
 
     img_width, img_height = img.size
 
@@ -422,8 +427,9 @@ def encode_image(image_file_path: Path, unread_count: int = 0, standard_error: b
     # noinspection PyUnresolvedReferences
     (width, baseline), (offset_x, offset_y) = font.font.getsize(unread_count_str)
 
+    percent_width_shift = int(img_width * 0.00)
     percent_height_shift = int(img_height * 0.06)
-    x = int((img_width - width) / 2)
+    x = int((img_width - (width - percent_width_shift)) / 2)
     y = int((img_height - ((ascent + offset_y + descent) - percent_height_shift)) / 2)
     position = (x, y)
 
@@ -540,7 +546,7 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                     return_completed_process=True
                 )
                 poppler_version = get_subprocess_output(
-                    ["awk", "{ print $3}"],
+                    ["awk", "{ print $4 }"],
                     piped_input=poppler_version_info.stdout,
                     return_stdout_str=True
                 )
@@ -549,14 +555,14 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
 
                 pdf_pages = convert_from_path(
                     path_str,
-                    fmt="png",
+                    fmt="PNG",
                     poppler_path=poppler_path,
                     size=(THUMBNAIL_PIXEL_SIZE, None)
                 )
 
                 output, thumb_str, attachment_has_image_thumbnail = convert_image_to_bytes(
                     output=BytesIO(),
-                    image=Image.fromarray(np.array(pdf_pages[0])),
+                    image=pdf_pages[0],
                     image_format="PNG"
                 )
 
@@ -658,12 +664,10 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                         # TODO: improve handling of GIFs
                         img = Image.open(path_str)
                         img_format = "GIF"
-                        # pass
 
                     elif mime_type == "image/png":
                         img = Image.open(path_str)
                         img_format = "PNG"
-                        # pass
 
                     elif mime_type == "image/heic":
                         heif_file = pyheif.read(path_str)
@@ -677,7 +681,6 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                             heif_file.stride,
                         )
                         img_format = "HEIC"
-                        # pass
 
                     else:
                         # TODO: handle more image MIME types
@@ -1033,7 +1036,7 @@ class TextOutput(BaseOutput):
                 cht.group_id as grp, 
                 cht.display_name as title, 
                 strftime(
-                    '%m-%d-%Y %H:%M:%S', 
+                    '%Y-%m-%d %H:%M:%S', 
                     datetime(date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch', 'localtime')
                 ) as timestamp, 
                 CASE 
@@ -1064,7 +1067,8 @@ class TextOutput(BaseOutput):
                 msg.cache_has_attachments, 
                 atc.mime_type, 
                 atc.filename, 
-                replace(replace(text, CHAR(10), ' '), CHAR(13), ' ') as message 
+                replace(replace(text, CHAR(10), ' '), CHAR(13), ' ') as body,
+                hex(msg.attributedBody) as att_body 
             FROM message msg 
             INNER JOIN handle hdl 
                 ON hdl.ROWID = msg.handle_id 
@@ -1083,7 +1087,7 @@ class TextOutput(BaseOutput):
             LEFT JOIN adb.ZABCDRECORD as rcrd 
                 ON (rcrd.Z_PK = pnmbr.ZOWNER OR rcrd.Z_PK = eml.ZOWNER) 
             WHERE is_read = 0 
-                AND text != 'NULL' 
+                AND (body != 'NULL' OR att_body != '') 
                 AND is_from_me != 1 
             ORDER BY date
         """
@@ -1100,7 +1104,7 @@ class TextOutput(BaseOutput):
                 cht.group_id as grp, 
                 cht.display_name as title, 
                 strftime(
-                    '%m-%d-%Y %H:%M:%S', 
+                    '%Y-%m-%d %H:%M:%S', 
                     datetime(date/1000000000 + strftime('%s', '2001-01-01'), 'unixepoch', 'localtime')
                 ) as timestamp, 
                 CASE 
@@ -1131,7 +1135,8 @@ class TextOutput(BaseOutput):
                 msg.cache_has_attachments, 
                 atc.mime_type, 
                 atc.filename, 
-                replace(replace(text, CHAR(10), ' '), CHAR(13), ' ') as message 
+                replace(replace(text, CHAR(10), ' '), CHAR(13), ' ') as body, 
+                hex(msg.attributedBody) as att_body 
             FROM message msg 
             INNER JOIN handle hdl 
                 ON hdl.ROWID = msg.handle_id 
@@ -1149,7 +1154,7 @@ class TextOutput(BaseOutput):
                 ON eml.ZADDRESSNORMALIZED = contact 
             LEFT JOIN adb.ZABCDRECORD as rcrd 
                 ON (rcrd.Z_PK = pnmbr.ZOWNER OR rcrd.Z_PK = eml.ZOWNER) 
-            WHERE text != 'NULL' 
+            WHERE (body != 'NULL' OR att_body != '') 
                 AND is_from_me != 1 
             ORDER BY date 
             DESC 
@@ -1163,7 +1168,7 @@ class TextOutput(BaseOutput):
             SELECT DISTINCT
                 cht.chat_identifier as cid, 
                 strftime(
-                    '%m-%d-%Y %H:%M:%S', 
+                    '%Y-%m-%d %H:%M:%S', 
                     datetime(date/1000000000 + strftime('%s', '2001-01-01') ,'unixepoch','localtime')
                 ) as timestamp, 
                 CASE 
@@ -1219,6 +1224,27 @@ class TextOutput(BaseOutput):
         else:
             return macos_username
 
+    @staticmethod
+    def _decode_attributed_body(attributed_body):
+
+        message = None
+        try:
+            # code snippet for parsing attributed body field (starting with macOS Ventura) adapted from:
+            # https://medium.com/@kellytgold/extracting-imessage-and-address-book-data-b6e2e5729b21
+            message = (
+                bytes.fromhex(attributed_body)
+                .decode("utf-8", errors="replace")
+                .split("NSNumber")[0]
+                .split("NSString")[1]
+                .split("NSDictionary")[0][6:-12]
+                .replace("�", "")
+                .strip()
+            )
+        except IndexError as e:
+            print(f"{e.__class__.__name__}: {e}")
+
+        return message
+
     # noinspection PyTypeChecker,PyUnresolvedReferences
     def _get_messages(self) -> None:
 
@@ -1229,15 +1255,30 @@ class TextOutput(BaseOutput):
             self.cursor.fetchall(),
             columns=[
                 "id", "rowid", "cguid", "cid", "groupid", "title", "timestamp", "contact", "number", "sender", "org",
-                "attachment", "attchtype", "attchfile", "body"
+                "attachment", "attchtype", "attchfile", "body", "attbody"
             ]
         )
+
         logging.debug(f"\n{unread_df.to_string()}\n")
+
+        # decode the NSMutableAttributedString stored in the attbody column to a human-readable string
+        unread_df["attbody"] = unread_df["attbody"].apply(self._decode_attributed_body)
+
+        # replace the contents of the body column with the contents of the attbody column when the body column is empty
+        unread_df["body"] = np.where(~unread_df["body"].isnull(), unread_df["body"], unread_df["attbody"])
+
+        # drop the attbody column after its contents have been copied to the body column
+        unread_df.drop("attbody", axis=1, inplace=True)
 
         # remove duplicate entries from macOS messages sqlite database (it seems that in macOS Monterey sometimes
         # there are duplicate rows for the same text which ONLY differ in the attached file name)
         unread_df = unread_df.drop_duplicates(subset="id")
+
+        # remove rows that do not have a rowid
+        unread_df = unread_df[~np.isnan(unread_df["rowid"])]
+
         unread_df.reset_index(drop=True, inplace=True)
+
         logging.debug(f"\n{unread_df.to_string()}\n")
 
         # self.cursor.execute(self._sqlite_query_get_messages_recent())
@@ -1473,8 +1514,8 @@ class RedditOutput(BaseOutput):
                                 if message_sent_after_last_user_mod_reply:
                                     # TODO: figure out how to check reddit mod discussions for actual unread count
                                     if (
-                                        modmail_message.author.id != reddit_user.id
-                                        # and unread_modmail_conversation_count > 0
+                                            modmail_message.author.id != reddit_user.id
+                                            # and unread_modmail_conversation_count > 0
                                     ):
                                         setattr(modmail_message, "parent_id", modmail_conversation.id)
                                         setattr(modmail_message, "subject", modmail_conversation.subject)
@@ -1555,7 +1596,6 @@ class RedditOutput(BaseOutput):
     def get_console_output(self) -> List[str]:
 
         self._get_messages()
-        # sys.exit()
 
         reddit_link = "https://www.reddit.com/message/inbox/"
 
