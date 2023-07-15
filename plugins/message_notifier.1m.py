@@ -58,7 +58,14 @@ from pync import Notifier
 from telethon.sessions import StringSession
 # noinspection PyProtectedMember
 from telethon.sync import TelegramClient, Dialog, Message
-from telethon.tl.types import User, MessageActionContactSignUp
+from telethon.tl.types import (
+    # DocumentAttributeAudio,
+    MessageActionContactSignUp,
+    MessageMediaDocument,
+    MessageMediaPhoto,
+    User
+)
+from telethon.utils import get_extension
 
 sys.dont_write_bytecode = True
 
@@ -1713,6 +1720,17 @@ class TelegramOutput(BaseOutput):
 
         self.standard_error = []
 
+    @staticmethod
+    def _get_message_media(message) -> Tuple[BytesIO, str, bool]:
+        media_bytes = BytesIO()
+        message.download_media(file=media_bytes)
+
+        img = Image.open(media_bytes)
+        # img.show()
+        return convert_image_to_bytes(
+            BytesIO(), img, "JPEG"
+        )
+
     def _get_messages(self) -> None:
 
         with TelegramClient(
@@ -1763,24 +1781,28 @@ class TelegramOutput(BaseOutput):
                         if message.media:
 
                             media_exists = 1
-                            # telethon mime type reference: https://github.com/LonamiWebs/Telethon/blob/18da855dd4dc787b7aab08fecf3066bac80790ff/telethon/utils.py
-                            media_type = message.media.document.mime_type
 
-                            if "image" in media_type:
-                                media_bytes = BytesIO()
-                                message.download_media(file=media_bytes)
+                            if isinstance(message.media, MessageMediaDocument):
+                                # telethon mime type reference: https://github.com/LonamiWebs/Telethon/blob/18da855dd4dc787b7aab08fecf3066bac80790ff/telethon/utils.py
+                                media_type = message.media.document.mime_type
 
-                                img = Image.open(media_bytes)
-                                # img.show()
-                                output, media_thumb_str, media_has_thumbnail = convert_image_to_bytes(
-                                    BytesIO(), img, "JPEG"
-                                )
-                            elif "video" in media_type:
-                                # TODO: handle Telegram video attachments
-                                pass
-                            elif "audio" in media_type:
-                                # TODO: handle Telegram audio attachments
-                                pass
+                                if "image" in media_type:
+                                    output, media_thumb_str, media_has_thumbnail = self._get_message_media(message)
+                                elif "video" in media_type:
+                                    # TODO: handle Telegram video attachments
+                                    pass
+                                elif "audio" in media_type:
+                                    # TODO: handle Telegram audio attachments
+                                    # audio_file = None
+                                    # for attribute in message.media.document.attributes:
+                                    #     if isinstance(attribute, DocumentAttributeAudio):
+                                    #         audio_file = attribute
+                                    pass
+
+                            elif isinstance(message.media, MessageMediaPhoto):
+                                if get_extension(message.media) == ".jpg":
+                                    media_type = "image/jpeg"
+                                output, media_thumb_str, media_has_thumbnail = self._get_message_media(message)
 
                         unread_df.loc[len(unread_df)] = [
                             message.id,
