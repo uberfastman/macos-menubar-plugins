@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/Users/wrenjr/.virtualenvs/macos-menubar-plugins-python_3.10.6/bin/python3.10
 # -*- coding: utf-8 -*-
 
 # to get homebrew and pyenv python working together, see:
@@ -46,7 +46,7 @@ import praw
 import pyheif
 import vobject
 from PIL import Image, ExifTags, ImageFilter, ImageDraw, ImageFont
-# noinspection PyUnresolvedReferences
+# noinspection PyUnresolvedReferences,PyProtectedMember
 from cv2 import VideoCapture, imencode
 from dateutil import tz
 from pandas import DataFrame, read_csv, concat, to_datetime
@@ -462,7 +462,7 @@ def encode_image(image_file_path: Path, unread_count: int = 0, standard_error: b
 def convert_image_to_bytes(output: BytesIO, image: Image, image_format: str, max_size: int = THUMBNAIL_PIXEL_SIZE,
                            optimize: bool = False, quality: int = 100,
                            conversion_attempts: int = 1) -> Tuple[BytesIO, str, bool]:
-    image.thumbnail((max_size, max_size), Image.ANTIALIAS)
+    image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
     image_format = image_format.upper()
 
     if image_format == "GIF":
@@ -608,7 +608,9 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                         frame_img_width, frame_img_height = frame_img.size
 
                         watermark_img = Image.open(video_file_icon_path)
-                        watermark_img.thumbnail((min(frame_img.size) // 2, min(frame_img.size) // 2), Image.ANTIALIAS)
+                        watermark_img.thumbnail(
+                            (min(frame_img.size) // 2, min(frame_img.size) // 2), Image.Resampling.LANCZOS
+                        )
 
                         watermark_img = watermark_img.convert("RGBA")
                         watermark_img = watermark_img.filter(ImageFilter.SMOOTH_MORE)
@@ -649,10 +651,10 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                                 orientation = key
 
                         img = Image.open(path_str)
-                        if hasattr(img, "_getexif"):  # only present in JPEGs
+                        if hasattr(img, "getexif"):  # only present in JPEGs
                             try:
                                 # noinspection PyProtectedMember
-                                exif = img._getexif()
+                                exif = img.getexif()
                                 if exif:
                                     exif = dict(exif.items())
 

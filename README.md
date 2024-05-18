@@ -31,7 +31,7 @@ The Message Notifier currently supports retrieval of unread messages from the fo
 <a name="message-notifier-dependencies"></a>
 ### Message Notifier Dependencies
 
-The Message Notifier requires Python 3.6+, which can be built from source, installed via Homebrew, or installed using `pyenv` *(recommended)*.
+The Message Notifier requires any Python version between Python 3.6 and 3.10 (versions later than Python 3.10 are not yet supported), which can be built from source, installed via Homebrew, or installed using `pyenv` *(recommended)*.
 
 Before installing the Python dependencies, you will need to install several Homebrew packages by running:
 ```shell

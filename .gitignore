@@ -11,6 +11,10 @@
 private*.json
 message-notifier*.json
 
+# Environment
+.env
+.venv
+
 # Persistent Data
 *.csv
 
