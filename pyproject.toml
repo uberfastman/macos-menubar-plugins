@@ -1,0 +1,24 @@
+[project]
+name = "macos-menubar-plugins"
+version = "1.0.0"
+description = "Plugin to display Text, Reddit, and Telegram messages in the SwiftBar macOS menubar application"
+readme = "README.md"
+requires-python = "==3.12.7"
+dependencies = [
+    "numpy==2.1.2",
+    "opencv-python==4.10.0.84",
+    "pandas==2.2.3",
+    "pdf2image==1.17.0",
+    "pillow==11.0.0",
+    "praw==7.8.1",
+    "prawcore==2.4.0",
+    "pyheif==0.8.0",
+    "pymediainfo==6.1.0",
+    "pync==2.0.3",
+    "python-dateutil==2.9.0.post0",
+    "telethon==1.37.0",
+    "vobject==0.9.8",
+]
+
+[tool.custom]
+environment = ".venv-python_3.12.7"

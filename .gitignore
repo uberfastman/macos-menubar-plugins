@@ -14,6 +14,8 @@ message-notifier*.json
 # Environment
 .env
 .venv
+venv*/
+.venv*/
 
 # Persistent Data
 *.csv

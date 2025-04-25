@@ -1,4 +1,4 @@
-#!/Users/wrenjr/.virtualenvs/macos-menubar-plugins-python_3.10.6/bin/python3.10
+#!/Users/wrenjr/Projects/personal/macos-menubar-plugins/.venv-python_3.12.7/bin/python
 # -*- coding: utf-8 -*-
 
 # to get homebrew and pyenv python working together, see:
@@ -392,7 +392,7 @@ def sanitize_url(url_str: str) -> str:
     url = parse.urlsplit(url_str)
     url = list(url)
     url[2] = parse.quote(url[2])
-    return parse.urlunsplit(url)
+    return str(parse.urlunsplit(url))
 
 
 # noinspection PyShadowingNames
@@ -431,8 +431,9 @@ def encode_image(image_file_path: Path, unread_count: int = 0, standard_error: b
     # offset_y = space above letters
     # ascent - offset_y = height of letters (not counting tails)
     # descent = space below letters (for tails)
-    # noinspection PyUnresolvedReferences
-    (width, baseline), (offset_x, offset_y) = font.font.getsize(unread_count_str)
+    (width, baseline), (offset_x, offset_y) = font.font.getsize(
+        unread_count_str, "", None, None, None, None
+    )
 
     percent_width_shift = int(img_width * 0.00)
     percent_height_shift = int(img_height * 0.06)
@@ -617,6 +618,7 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
                         watermark_img_data = watermark_img.getdata()
 
                         transparent_watermark_img_data = []
+                        pixel: List[float]
                         for pixel in watermark_img_data:
                             # (0, 0, 0, 255) = black, (255, 255, 255, 255) = white
                             if pixel[0] == 0 and pixel[1] == 0 and pixel[2] == 0 and pixel[3] > 0:
@@ -702,6 +704,8 @@ def encode_attachment(message_row) -> Tuple[Union[str, List], bool]:
 
         except IOError as e:
             logger.error(f"Unable to create thumbnail for '{path_str}' with error {repr(e)}")
+
+    return "", False
 
 
 # noinspection DuplicatedCode
@@ -1446,9 +1450,9 @@ class RedditOutput(BaseOutput):
         self.message_type = "reddit"
 
         self.reddit_account_credentials_list = []
-        if type(credentials) == dict:
+        if isinstance(credentials, dict):
             self.reddit_account_credentials_list.append(credentials)
-        elif type(credentials) == list:
+        elif isinstance(credentials, list):
             self.reddit_account_credentials_list = credentials
 
         self.accounts_conversations = {}  # type: Dict[str, OrderedDict]
