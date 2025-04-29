@@ -35,9 +35,9 @@ from importlib import util
 from io import BytesIO
 from pathlib import Path
 from random import Random
-from re import compile, UNICODE
-from subprocess import call, run, CompletedProcess, DEVNULL, PIPE, STDOUT
-from typing import Dict, Set, List, Tuple, Union
+from re import UNICODE, compile
+from subprocess import CompletedProcess, DEVNULL, PIPE, STDOUT, call, run
+from typing import Dict, List, Set, Tuple, Union
 from urllib import parse
 from uuid import UUID
 
@@ -45,19 +45,19 @@ import numpy as np
 import praw
 import pyheif
 import vobject
-from PIL import Image, ExifTags, ImageFilter, ImageDraw, ImageFont
+from PIL import ExifTags, Image, ImageDraw, ImageFilter, ImageFont
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from cv2 import VideoCapture, imencode
 from dateutil import tz
-from pandas import DataFrame, read_csv, concat, to_datetime
+from pandas import DataFrame, concat, isna, read_csv, to_datetime
 from pandas.errors import EmptyDataError
 from pdf2image import convert_from_path
-from prawcore.exceptions import ResponseException, RequestException, Forbidden
+from prawcore.exceptions import Forbidden, RequestException, ResponseException
 from pymediainfo import MediaInfo
 from pync import Notifier
 from telethon.sessions import StringSession
 # noinspection PyProtectedMember
-from telethon.sync import TelegramClient, Dialog, Message
+from telethon.sync import Dialog, Message, TelegramClient
 from telethon.tl.types import (
     # DocumentAttributeAudio,
     MessageActionContactSignUp,
@@ -1288,7 +1288,7 @@ class TextOutput(BaseOutput):
         unread_df = unread_df.drop_duplicates(subset="id")
 
         # remove rows that do not have a rowid
-        unread_df = unread_df[~np.isnan(unread_df["rowid"])]
+        unread_df = unread_df[~isna(unread_df["rowid"])]
 
         unread_df.reset_index(drop=True, inplace=True)
 
