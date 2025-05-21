@@ -1,4 +1,4 @@
-#!/Users/wrenjr/Projects/personal/macos-menubar-plugins/.venv-python_3.12.7/bin/python
+#!/Users/wrenjr/Projects/personal/macos-menubar-plugins/.venv-python_3.12.7/bin/python3.12
 # -*- coding: utf-8 -*-
 
 # to get homebrew and pyenv python working together, see:
@@ -55,6 +55,7 @@ from pdf2image import convert_from_path
 from prawcore.exceptions import Forbidden, RequestException, ResponseException
 from pymediainfo import MediaInfo
 from pync import Notifier
+from telethon.errors.rpcbaseerrors import RPCError
 from telethon.sessions import StringSession
 # noinspection PyProtectedMember
 from telethon.sync import Dialog, Message, TelegramClient
@@ -1739,110 +1740,119 @@ class TelegramOutput(BaseOutput):
 
     def _get_messages(self) -> None:
 
-        with TelegramClient(
-                StringSession(self.credentials.get("session_string")),
-                self.credentials.get("api_id"),
-                self.credentials.get("api_hash")) as client:  # type: TelegramClient
+        try:
+            with TelegramClient(
+                    StringSession(self.credentials.get("session_string")),
+                    self.credentials.get("api_id"),
+                    self.credentials.get("api_hash")) as client:  # type: TelegramClient
 
-            telegram_user = client.get_me()  # type: User
-            self.telegram_username = telegram_user.username
+                telegram_user = client.get_me()  # type: User
+                self.telegram_username = telegram_user.username
 
-            unread_df = DataFrame(
-                columns=[
-                    "id", "cid", "title", "timestamp", "sender", "body", "attachment", "attachment_type",
-                    "attachment_file", "attachment_has_thumbnail", "context", "system"
-                ]
-            )
+                unread_df = DataFrame(
+                    columns=[
+                        "id", "cid", "title", "timestamp", "sender", "body", "attachment", "attachment_type",
+                        "attachment_file", "attachment_has_thumbnail", "context", "system"
+                    ]
+                )
 
-            for dialog in client.iter_dialogs():  # type: Dialog
-                if not getattr(dialog.entity, "is_private", False) and dialog.unread_count > 0:
-                    self.unread_count += dialog.unread_count
+                for dialog in client.iter_dialogs():  # type: Dialog
+                    if not getattr(dialog.entity, "is_private", False) and dialog.unread_count > 0:
+                        self.unread_count += dialog.unread_count
 
-                    unread_count = dialog.unread_count
-                    for message in client.iter_messages(dialog.entity):  # type: Message
+                        unread_count = dialog.unread_count
+                        for message in client.iter_messages(dialog.entity):  # type: Message
 
-                        sender = message.get_sender()  # type: User
+                            sender = message.get_sender()  # type: User
 
-                        sender_name = ""
-                        if sender.first_name:
-                            sender_name += f"{sender.first_name} "
-                        if sender.last_name:
-                            sender_name += f"{sender.last_name} "
-                        if sender.username:
-                            sender_name += f"({sender.username})"
+                            sender_name = ""
+                            if sender.first_name:
+                                sender_name += f"{sender.first_name} "
+                            if sender.last_name:
+                                sender_name += f"{sender.last_name} "
+                            if sender.username:
+                                sender_name += f"({sender.username})"
 
-                        sender_name = sender_name.strip()
+                            sender_name = sender_name.strip()
 
-                        setattr(message, "system", False)
-                        if message.action:
-                            if isinstance(message.action, MessageActionContactSignUp):
-                                message.message = f"{sender_name} joined Telegram"
-                                message.system = True
+                            setattr(message, "system", False)
+                            if message.action:
+                                if isinstance(message.action, MessageActionContactSignUp):
+                                    message.message = f"{sender_name} joined Telegram"
+                                    message.system = True
 
-                        media_exists = 0
-                        media_type = None
-                        media_thumb_str = None
-                        media_has_thumbnail = False
+                            media_exists = 0
+                            media_type = None
+                            media_thumb_str = None
+                            media_has_thumbnail = False
 
-                        if message.media:
+                            if message.media:
 
-                            media_exists = 1
+                                media_exists = 1
 
-                            if isinstance(message.media, MessageMediaDocument):
-                                # telethon mime type reference: https://github.com/LonamiWebs/Telethon/blob/18da855dd4dc787b7aab08fecf3066bac80790ff/telethon/utils.py
-                                media_type = message.media.document.mime_type
+                                if isinstance(message.media, MessageMediaDocument):
+                                    # telethon mime type reference: https://github.com/LonamiWebs/Telethon/blob/18da855dd4dc787b7aab08fecf3066bac80790ff/telethon/utils.py
+                                    media_type = message.media.document.mime_type
 
-                                if "image" in media_type:
+                                    if "image" in media_type:
+                                        output, media_thumb_str, media_has_thumbnail = self._get_message_media(message)
+                                    elif "video" in media_type:
+                                        # TODO: handle Telegram video attachments
+                                        pass
+                                    elif "audio" in media_type:
+                                        # TODO: handle Telegram audio attachments
+                                        # audio_file = None
+                                        # for attribute in message.media.document.attributes:
+                                        #     if isinstance(attribute, DocumentAttributeAudio):
+                                        #         audio_file = attribute
+                                        pass
+
+                                elif isinstance(message.media, MessageMediaPhoto):
+                                    if get_extension(message.media) == ".jpg":
+                                        media_type = "image/jpeg"
                                     output, media_thumb_str, media_has_thumbnail = self._get_message_media(message)
-                                elif "video" in media_type:
-                                    # TODO: handle Telegram video attachments
-                                    pass
-                                elif "audio" in media_type:
-                                    # TODO: handle Telegram audio attachments
-                                    # audio_file = None
-                                    # for attribute in message.media.document.attributes:
-                                    #     if isinstance(attribute, DocumentAttributeAudio):
-                                    #         audio_file = attribute
-                                    pass
 
-                            elif isinstance(message.media, MessageMediaPhoto):
-                                if get_extension(message.media) == ".jpg":
-                                    media_type = "image/jpeg"
-                                output, media_thumb_str, media_has_thumbnail = self._get_message_media(message)
+                            unread_df.loc[len(unread_df)] = [
+                                message.id,
+                                dialog.id,
+                                dialog.name if dialog.is_channel else None,
+                                message.date,
+                                sender_name,
+                                message.message,
+                                media_exists,
+                                media_type,
+                                media_thumb_str,
+                                media_has_thumbnail,
+                                f"user_id={sender.id}&message_id={message.id}",
+                                message.system
 
-                        unread_df.loc[len(unread_df)] = [
-                            message.id,
-                            dialog.id,
-                            dialog.name if dialog.is_channel else None,
-                            message.date,
-                            sender_name,
-                            message.message,
-                            media_exists,
-                            media_type,
-                            media_thumb_str,
-                            media_has_thumbnail,
-                            f"user_id={sender.id}&message_id={message.id}",
-                            message.system
+                            ]
 
-                        ]
+                            unread_count -= 1
+                            if unread_count == 0:
+                                break
 
-                        unread_count -= 1
-                        if unread_count == 0:
-                            break
+                logger.debug(f"\n{unread_df.to_string()}\n")
 
-            logger.debug(f"\n{unread_df.to_string()}\n")
+                # display messages in reverse order they were received (newest to oldest, top to bottom)
+                # unread_df.sort_values("timestamp", inplace=True, ascending=False)
 
-            # display messages in reverse order they were received (newest to oldest, top to bottom)
-            # unread_df.sort_values("timestamp", inplace=True, ascending=False)
+                for row in unread_df.itertuples():
 
-            for row in unread_df.itertuples():
-
-                # noinspection PyTypeChecker
-                unread_message = TelegramMessage(row, MAX_LINE_CHARS, self.unread_display_str)
-                if unread_message.cid not in self.conversations.keys():
-                    self.conversations[unread_message.cid] = TelegramConversation(unread_message)
-                else:
-                    self.conversations.get(unread_message.cid).add_message(unread_message)
+                    # noinspection PyTypeChecker
+                    unread_message = TelegramMessage(row, MAX_LINE_CHARS, self.unread_display_str)
+                    if unread_message.cid not in self.conversations.keys():
+                        self.conversations[unread_message.cid] = TelegramConversation(unread_message)
+                    else:
+                        self.conversations.get(unread_message.cid).add_message(unread_message)
+        except RPCError as e:
+            logger.error(repr(e))
+            self.standard_error.extend([
+                "---",
+                "❗",
+                f"--{ANSI_RED}UNABLE TO RETRIEVE TELEGRAM ACCOUNT CONTENT WITH ERROR: {repr(e)}!{ANSI_OFF} | "
+                f"ansi=true "
+            ])
 
     def get_console_output(self) -> List[str]:
 

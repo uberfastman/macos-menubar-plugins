@@ -1,9 +1,10 @@
 version = 1
+revision = 1
 requires-python = "==3.12.7"
 resolution-markers = [
-    "platform_system == 'Darwin' and python_full_version == '3.12.7'",
-    "platform_machine == 'aarch64' and platform_system == 'Linux' and python_full_version == '3.12.7'",
-    "(platform_machine != 'aarch64' and platform_system != 'Darwin') or (platform_system != 'Darwin' and platform_system != 'Linux')",
+    "sys_platform == 'darwin'",
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 
 [[package]]
@@ -20,7 +21,7 @@ name = "cffi"
 version = "1.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "python_full_version == '3.12.7'" },
+    { name = "pycparser" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fc/97/c783634659c2920c3fc70419e3af40972dbaf758daa229a7d6ea6135c90d/cffi-1.17.1.tar.gz", hash = "sha256:1c39c6016c32bc48dd54561950ebd6836e1670f2ae46128f67cf49e789c52824", size = 516621 }
 wheels = [
@@ -75,36 +76,36 @@ name = "macos-menubar-plugins"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "numpy", marker = "python_full_version == '3.12.7'" },
-    { name = "opencv-python", marker = "python_full_version == '3.12.7'" },
-    { name = "pandas", marker = "python_full_version == '3.12.7'" },
-    { name = "pdf2image", marker = "python_full_version == '3.12.7'" },
-    { name = "pillow", marker = "python_full_version == '3.12.7'" },
-    { name = "praw", marker = "python_full_version == '3.12.7'" },
-    { name = "prawcore", marker = "python_full_version == '3.12.7'" },
-    { name = "pyheif", marker = "python_full_version == '3.12.7'" },
-    { name = "pymediainfo", marker = "python_full_version == '3.12.7'" },
-    { name = "pync", marker = "python_full_version == '3.12.7'" },
-    { name = "python-dateutil", marker = "python_full_version == '3.12.7'" },
-    { name = "telethon", marker = "python_full_version == '3.12.7'" },
-    { name = "vobject", marker = "python_full_version == '3.12.7'" },
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pandas" },
+    { name = "pdf2image" },
+    { name = "pillow" },
+    { name = "praw" },
+    { name = "prawcore" },
+    { name = "pyheif" },
+    { name = "pymediainfo" },
+    { name = "pync" },
+    { name = "python-dateutil" },
+    { name = "telethon" },
+    { name = "vobject" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=2.1.2" },
-    { name = "opencv-python", specifier = ">=4.10.0.84" },
-    { name = "pandas", specifier = ">=2.2.3" },
-    { name = "pdf2image", specifier = ">=1.17.0" },
-    { name = "pillow", specifier = ">=11.0.0" },
-    { name = "praw", specifier = ">=7.8.1" },
-    { name = "prawcore", specifier = ">=2.4.0" },
-    { name = "pyheif", specifier = ">=0.8.0" },
-    { name = "pymediainfo", specifier = ">=6.1.0" },
-    { name = "pync", specifier = ">=2.0.3" },
-    { name = "python-dateutil", specifier = ">=2.9.0.post0" },
-    { name = "telethon", specifier = ">=1.37.0" },
-    { name = "vobject", specifier = ">=0.9.8" },
+    { name = "numpy", specifier = "==2.1.2" },
+    { name = "opencv-python", specifier = "==4.10.0.84" },
+    { name = "pandas", specifier = "==2.2.3" },
+    { name = "pdf2image", specifier = "==1.17.0" },
+    { name = "pillow", specifier = "==11.0.0" },
+    { name = "praw", specifier = "==7.8.1" },
+    { name = "prawcore", specifier = "==2.4.0" },
+    { name = "pyheif", specifier = "==0.8.0" },
+    { name = "pymediainfo", specifier = "==6.1.0" },
+    { name = "pync", specifier = "==2.0.3" },
+    { name = "python-dateutil", specifier = "==2.9.0.post0" },
+    { name = "telethon", specifier = "==1.37.0" },
+    { name = "vobject", specifier = "==0.9.8" },
 ]
 
 [[package]]
@@ -130,7 +131,7 @@ name = "opencv-python"
 version = "4.10.0.84"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "python_full_version == '3.12.7'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4a/e7/b70a2d9ab205110d715906fc8ec83fbb00404aeb3a37a0654fdb68eb0c8c/opencv-python-4.10.0.84.tar.gz", hash = "sha256:72d234e4582e9658ffea8e9cae5b63d488ad06994ef12d81dc303b17472f3526", size = 95103981 }
 wheels = [
@@ -147,10 +148,10 @@ name = "pandas"
 version = "2.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "python_full_version == '3.12.7'" },
-    { name = "python-dateutil", marker = "python_full_version == '3.12.7'" },
-    { name = "pytz", marker = "python_full_version == '3.12.7'" },
-    { name = "tzdata", marker = "python_full_version == '3.12.7'" },
+    { name = "numpy" },
+    { name = "python-dateutil" },
+    { name = "pytz" },
+    { name = "tzdata" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9c/d6/9f8431bacc2e19dca897724cd097b1bb224a6ad5433784a44b587c7c13af/pandas-2.2.3.tar.gz", hash = "sha256:4f18ba62b61d7e192368b84517265a99b4d7ee8912f8708660fb4a366cc82667", size = 4399213 }
 wheels = [
@@ -168,7 +169,7 @@ name = "pdf2image"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pillow", marker = "python_full_version == '3.12.7'" },
+    { name = "pillow" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/00/d8/b280f01045555dc257b8153c00dee3bc75830f91a744cd5f84ef3a0a64b1/pdf2image-1.17.0.tar.gz", hash = "sha256:eaa959bc116b420dd7ec415fcae49b98100dda3dd18cd2fdfa86d09f112f6d57", size = 12811 }
 wheels = [
@@ -199,9 +200,9 @@ name = "praw"
 version = "7.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "prawcore", marker = "python_full_version == '3.12.7'" },
-    { name = "update-checker", marker = "python_full_version == '3.12.7'" },
-    { name = "websocket-client", marker = "python_full_version == '3.12.7'" },
+    { name = "prawcore" },
+    { name = "update-checker" },
+    { name = "websocket-client" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4c/52/7dd0b3d9ccb78e90236420ef6c51b6d9b2400a7229442f0cfcf2258cce21/praw-7.8.1.tar.gz", hash = "sha256:3c5767909f71e48853eb6335fef7b50a43cbe3da728cdfb16d3be92904b0a4d8", size = 154106 }
 wheels = [
@@ -213,7 +214,7 @@ name = "prawcore"
 version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "requests", marker = "python_full_version == '3.12.7'" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8a/62/d4c99cf472205f1e5da846b058435a6a7c988abf8eb6f7d632a7f32f4a77/prawcore-2.4.0.tar.gz", hash = "sha256:b7b2b5a1d04406e086ab4e79988dc794df16059862f329f4c6a43ed09986c335", size = 15862 }
 wheels = [
@@ -249,7 +250,7 @@ name = "pyheif"
 version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_full_version == '3.12.7'" },
+    { name = "cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ec/11/d63f215d8c9c416409e2d665bf7594a8886780629296b4f0d35857561c9b/pyheif-0.8.0.tar.gz", hash = "sha256:e9b4c11ebad482fc25a0804ce295b44b660cbf7829a228f56b071f325f9e0de4", size = 20503 }
 wheels = [
@@ -273,7 +274,7 @@ name = "pync"
 version = "2.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "python-dateutil", marker = "python_full_version == '3.12.7'" },
+    { name = "python-dateutil" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/71/ce/06fca51df0cceb13dbcd8168e2657ffd942184005b3bb958dd17c14e0148/pync-2.0.3.tar.gz", hash = "sha256:38b9e61735a3161f9211a5773c5f5ea698f36af4ff7f77fa03e8d1ff0caa117f", size = 374289 }
 
@@ -282,7 +283,7 @@ name = "python-dateutil"
 version = "2.9.0.post0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "python_full_version == '3.12.7'" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432 }
 wheels = [
@@ -303,10 +304,10 @@ name = "requests"
 version = "2.32.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "certifi", marker = "python_full_version == '3.12.7'" },
-    { name = "charset-normalizer", marker = "python_full_version == '3.12.7'" },
-    { name = "idna", marker = "python_full_version == '3.12.7'" },
-    { name = "urllib3", marker = "python_full_version == '3.12.7'" },
+    { name = "certifi" },
+    { name = "charset-normalizer" },
+    { name = "idna" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/63/70/2bf7780ad2d390a8d301ad0b550f1581eadbd9a20f896afe06353c2a2913/requests-2.32.3.tar.gz", hash = "sha256:55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760", size = 131218 }
 wheels = [
@@ -318,7 +319,7 @@ name = "rsa"
 version = "4.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyasn1", marker = "python_full_version == '3.12.7'" },
+    { name = "pyasn1" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/aa/65/7d973b89c4d2351d7fb232c2e452547ddfa243e93131e7cfa766da627b52/rsa-4.9.tar.gz", hash = "sha256:e38464a49c6c85d7f1351b0126661487a7e0a14a50f1675ec50eb34d4f20ef21", size = 29711 }
 wheels = [
@@ -339,8 +340,8 @@ name = "telethon"
 version = "1.37.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyaes", marker = "python_full_version == '3.12.7'" },
-    { name = "rsa", marker = "python_full_version == '3.12.7'" },
+    { name = "pyaes" },
+    { name = "rsa" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4e/3c/a94a30abfa8be573dfff298b94a0402789e902a795a19eadf4294387009d/Telethon-1.37.0.tar.gz", hash = "sha256:e5e43cff1c1b34e2f9c2b395215beb6e9bda706b69def7efff4f55b23c9c4374", size = 620160 }
 
@@ -358,7 +359,7 @@ name = "update-checker"
 version = "0.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "requests", marker = "python_full_version == '3.12.7'" },
+    { name = "requests" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5c/0b/1bec4a6cc60d33ce93d11a7bcf1aeffc7ad0aa114986073411be31395c6f/update_checker-0.18.0.tar.gz", hash = "sha256:6a2d45bb4ac585884a6b03f9eade9161cedd9e8111545141e9aa9058932acb13", size = 6699 }
 wheels = [
@@ -379,9 +380,9 @@ name = "vobject"
 version = "0.9.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "python-dateutil", marker = "python_full_version == '3.12.7'" },
-    { name = "pytz", marker = "python_full_version == '3.12.7'" },
-    { name = "six", marker = "python_full_version == '3.12.7'" },
+    { name = "python-dateutil" },
+    { name = "pytz" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/47/06/c477d9a8b75471243f2b4eeef39cb639a1cf978990c11e9e56359ab01c82/vobject-0.9.8.tar.gz", hash = "sha256:db00a7f4db49397155dd8a6871e8a2a0175a6eba5a654c30e910f82b29514b58", size = 61760 }
 wheels = [
